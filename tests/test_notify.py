@@ -64,3 +64,33 @@ def test_the_alert_text_carries_what_you_need():
     assert "a3f21c" in text
     assert "tiktok" in text
     assert "/errors a3f21c" in text, "must say how to get the detail"
+
+
+class TestEscaping:
+    """Alerts are HTML. An unescaped & or < loses the whole message.
+
+    This matters most for unclassified errors, which usually quote a URL — the
+    alerts you least want to lose.
+    """
+
+    def test_a_url_in_the_message_does_not_break_it(self):
+        text = new_error_alert("a3f21c", "twitter",
+                               "Unable to fetch https://x.com/a?b=1&c=2")
+        assert "&amp;" in text
+        assert "?b=1&c=2" not in text, "bare ampersand would be rejected by Telegram"
+
+    def test_angle_brackets_are_escaped(self):
+        text = new_error_alert("a3f21c", "twitter", "<video> tag missing")
+        assert "&lt;video&gt;" in text
+        assert "<video>" not in text
+
+    def test_the_markup_we_add_survives(self):
+        text = new_error_alert("a3f21c", "tiktok", "plain message")
+        assert "<b>new error</b>" in text
+        assert "<code>a3f21c</code>" in text
+
+    def test_only_supported_tags_remain(self):
+        import re
+        text = new_error_alert("id", "x", "<script>alert(1)</script> & more")
+        tags = set(re.findall(r"</?([a-z]+)[^>]*>", text))
+        assert tags <= {"b", "code"}, f"unexpected tags: {tags}"

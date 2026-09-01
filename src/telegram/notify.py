@@ -9,6 +9,8 @@ import logging
 import time
 from collections import deque
 
+from src.telegram.format import esc
+
 log = logging.getLogger(__name__)
 
 MAX_ALERTS_PER_HOUR = 6
@@ -55,6 +57,12 @@ class Notifier:
 
 
 def new_error_alert(fingerprint: str, platform: str, message: str) -> str:
-    return (f"⚠️ <b>new error</b> <code>{fingerprint}</code>\n"
-            f"{platform}\n{message[:160]}\n\n"
-            f"<code>/errors {fingerprint}</code> for detail")
+    """Escaped, because alerts are sent as HTML.
+
+    An unclassified error usually quotes a URL, and a bare `&` or `<` makes
+    Telegram reject the whole message. That would silently lose exactly the
+    alerts worth having: the ones about failures nothing has classified yet.
+    """
+    return (f"⚠️ <b>new error</b> <code>{esc(fingerprint)}</code>\n"
+            f"{esc(platform)}\n{esc(message[:160])}\n\n"
+            f"<code>/errors {esc(fingerprint)}</code> for detail")
