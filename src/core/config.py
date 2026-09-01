@@ -51,6 +51,9 @@ class Config:
     cookies_file: Path | None = None
     health_port: int = 7860
     health_host: str = "0.0.0.0"
+    heartbeat_url: str = ""
+    heartbeat_interval_seconds: float = 300.0
+    cookie_warn_days: float = 14.0
     event_salt: str = ""
 
     @property
@@ -135,4 +138,7 @@ def load_config() -> Config:
         # Identifiers in the event log are hashed, never stored raw. Deriving the
         # salt from the token keeps it stable across restarts with no extra config.
         event_salt=os.environ.get("EVENT_SALT", "").strip() or token,
+        heartbeat_url=os.environ.get("HEARTBEAT_URL", "").strip(),
+        heartbeat_interval_seconds=_float_env("HEARTBEAT_INTERVAL_SECONDS", 300.0),
+        cookie_warn_days=_float_env("COOKIE_WARN_DAYS", 14.0),
     )

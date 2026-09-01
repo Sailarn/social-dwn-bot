@@ -10,6 +10,7 @@ from pathlib import Path
 from aiogram import Bot, Dispatcher
 from aiohttp import web
 
+from src.core import cookies, heartbeat
 from src.core.config import Config, load_config
 from src.core.pacing import Pacer, PlatformPacer
 from src.core.tracing import RequestIdFilter
@@ -49,21 +50,27 @@ async def _start_health_server(host: str, port: int) -> web.AppRunner:
     return runner
 
 
-COOKIE_STALE_DAYS = 30
-
-
 def _report_cookies(config: Config) -> float | None:
-    """Returns the age in days when the cookies are stale enough to mention."""
-    """Cookies expire quietly; say how old they are so a silent death is visible."""
+    """Days remaining when the session is close enough to expiry to say so.
+
+    Read from the cookie file's own expiry fields rather than its age: a freshly
+    exported file can still hold a nearly-dead session.
+    """
     if config.cookies_file is None:
         log.info("no cookies file: login-walled posts will be refused")
         return None
-    age_days = (time.time() - Path(config.cookies_file).stat().st_mtime) / 86400
-    log.info("cookies loaded from %s (%.0f days old)", config.cookies_file, age_days)
-    if age_days > COOKIE_STALE_DAYS:
-        log.warning("cookies are %.0f days old; if Instagram starts refusing posts, "
-                    "export them again", age_days)
-        return age_days
+
+    remaining = cookies.days_until_expiry(Path(config.cookies_file))
+    if remaining is None:
+        log.info("cookies loaded from %s (no expiry found)", config.cookies_file)
+        return None
+
+    log.info("cookies loaded from %s (session expires in %.0f days)",
+             config.cookies_file, remaining)
+    if remaining <= config.cookie_warn_days:
+        log.warning("instagram session expires in %.0f days; export cookies again",
+                    remaining)
+        return remaining
     return None
 
 
@@ -107,7 +114,7 @@ async def main() -> None:
     _configure_logging()
     config = load_config()
     _warn_if_open(config)
-    stale_cookie_days = _report_cookies(config)
+    expiring_in_days = _report_cookies(config)
     if not config.admin_user_ids:
         log.warning("ADMIN_USER_IDS is empty: /stats, /errors and /health are disabled")
 
@@ -143,10 +150,17 @@ async def main() -> None:
         config.min_free_disk_mb, config.min_free_memory_mb,
     )
 
-    if stale_cookie_days:
+    if expiring_in_days is not None:
         await services.notifier.send(
-            f"🍪 cookies are {stale_cookie_days:.0f} days old. If Instagram starts "
-            f"refusing posts, export them again.")
+            f"🍪 Instagram session expires in {expiring_in_days:.0f} days. "
+            f"Export cookies again before login-walled posts start failing.")
+
+    heartbeat_task = None
+    if config.heartbeat_url:
+        heartbeat_task = asyncio.create_task(
+            heartbeat.run(config.heartbeat_url, config.heartbeat_interval_seconds))
+    else:
+        log.info("no HEARTBEAT_URL: nothing will notice if this process stops")
 
     try:
         await _build_dispatcher().start_polling(
@@ -159,6 +173,8 @@ async def main() -> None:
             handle_signals=False,
         )
     finally:
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
         await health_runner.cleanup()
         await bot.session.close()
         cache.close()
