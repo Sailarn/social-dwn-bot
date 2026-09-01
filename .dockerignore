@@ -1,0 +1,12 @@
+.git
+.env
+data/
+__pycache__/
+*.pyc
+.venv/
+README.md
+tests/
+scripts/
+plans/
+pyproject.toml
+requirements-dev.txt

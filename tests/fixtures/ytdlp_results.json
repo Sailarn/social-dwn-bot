@@ -1,0 +1,164 @@
+{
+  "instagram_video": {
+    "id": "TESTVIDEO01",
+    "title": "Test video post",
+    "extractor_key": "Instagram",
+    "extractor": "Instagram",
+    "webpage_url": "https://www.instagram.com/reel/TESTVIDEO01/",
+    "ext": "mp4",
+    "url": "https://scontent.cdninstagram.com/v/test/media.jpg",
+    "formats": [
+      {
+        "format_id": "dash-1796711798279478a",
+        "ext": "m4a",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg",
+        "filesize": null,
+        "vcodec": "none",
+        "acodec": "mp4a.40.5"
+      },
+      {
+        "format_id": "1",
+        "ext": "mp4",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg",
+        "filesize": null,
+        "vcodec": null,
+        "acodec": null
+      },
+      {
+        "format_id": "2",
+        "ext": "mp4",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg",
+        "filesize": null,
+        "vcodec": null,
+        "acodec": null
+      },
+      {
+        "format_id": "3",
+        "ext": "mp4",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg",
+        "filesize": null,
+        "vcodec": null,
+        "acodec": null
+      },
+      {
+        "format_id": "dash-1797331668217491v",
+        "ext": "mp4",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg",
+        "filesize": null,
+        "vcodec": "vp09.00.30.08.00.01.06.01.00",
+        "acodec": "none"
+      }
+    ],
+    "thumbnails": [
+      {
+        "id": "0",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "1",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "2",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "3",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "4",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "5",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "6",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "7",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "8",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "9",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "10",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      }
+    ]
+  },
+  "instagram_photo": {
+    "id": "TESTPHOTO01",
+    "title": "Test photo post",
+    "extractor_key": "Instagram",
+    "extractor": "Instagram",
+    "webpage_url": "https://www.instagram.com/p/TESTPHOTO01/",
+    "thumbnails": [
+      {
+        "id": "0",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "1",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "2",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "3",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "4",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "5",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "6",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "7",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "8",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "9",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "10",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "11",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "12",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      },
+      {
+        "id": "13",
+        "url": "https://scontent.cdninstagram.com/v/test/media.jpg"
+      }
+    ]
+  }
+}

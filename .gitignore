@@ -1,0 +1,24 @@
+# --- secrets: never commit these ---
+.env
+.env.*
+!.env.example
+cookies*.txt
+data/
+
+# --- local state ---
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+.DS_Store
+
+# --- working notes, kept offline ---
+# Design docs, the risk register and the plan history are working files for the
+# machine this runs on, not part of what someone else needs to run the bot.
+TODO.md
+docs/RISKS.md
+docs/INTERNALS.md
+docs/plans/
+docs/done/
+telegraph-token.txt

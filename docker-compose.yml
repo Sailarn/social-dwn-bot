@@ -1,0 +1,19 @@
+services:
+  bot:
+    build: .
+    image: social-download-tg
+    container_name: social-download-tg
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
+    # Loopback only: the health endpoint is for the host and for container
+    # platforms, never for the network. Drop the 127.0.0.1 prefix only if your
+    # platform health-checks from outside the machine.
+    ports:
+      - "127.0.0.1:7860:7860"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

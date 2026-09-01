@@ -1,0 +1,15 @@
+[project]
+name = "social-download-tg"
+version = "1.0.0"
+description = "Telegram bot that replies to social media links with the media itself"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+
+[tool.pytest.ini_options]
+# Tests import the application modules directly from the repo root.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "network: hits a real site; skipped unless --run-network is passed",
+]

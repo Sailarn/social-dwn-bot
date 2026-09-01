@@ -1,0 +1,29 @@
+# systemd unit, as an alternative to PM2.
+#
+# The paths below are placeholders. Substitute them for your install, then
+# enable it:
+#
+#   sed -e "s|__USER__|$USER|g" -e "s|__DIR__|$PWD|g" \
+#       deploy/social-download-tg.service | sudo tee /etc/systemd/system/social-download-tg.service
+#   sudo systemctl enable --now social-download-tg
+#   journalctl -u social-download-tg -f
+
+[Unit]
+Description=Telegram social media download bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+EnvironmentFile=__DIR__/.env
+ExecStart=__DIR__/.venv/bin/python bot.py
+Restart=always
+RestartSec=10
+
+# yt-dlp breaks whenever a site changes its player; keep it current.
+ExecStartPre=-__DIR__/.venv/bin/pip install --quiet --upgrade yt-dlp
+
+[Install]
+WantedBy=multi-user.target

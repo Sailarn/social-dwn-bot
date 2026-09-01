@@ -1,0 +1,15 @@
+# Lint config. F821 (undefined name) is the one that matters most here: the bot
+# once crash-looped on the Pi because an import was removed but its use in a
+# type annotation was not, and no test imported that module.
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["F", "E9", "B", "UP", "SIM", "RET"]
+ignore = [
+    "B008",    # function call in argument default - fine for our dataclasses
+    "RET504",  # named variable before return often reads better
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["B011"]
