@@ -5,10 +5,12 @@ authenticated traffic is what gets a scraping account flagged. So: anonymous
 first, cookies only for failures a session could actually fix.
 """
 
+import dataclasses
+
 import pytest
 import yt_dlp
 
-from src.core.config import Config
+from src.core.config import Config, load_config
 from src.core.errors import ClipRejected, ClipUnavailable
 from src.media import extract, fetch
 from src.media.ytdlp import media_options
@@ -109,6 +111,42 @@ class TestNoPointlessRetries:
         with pytest.raises(ClipRejected, match="needs a login"):
             extract.probe("https://instagram.com/p/X/", Config(bot_token="x"))
         assert fake.calls == ["anonymous"]
+
+
+class TestCookiesOnThrottle:
+    """Opt-in, for datacenter IPs that Instagram throttles on sight."""
+
+    THROTTLE = "HTTP Error 429: Too Many Requests"
+
+    @pytest.fixture
+    def opted_in(self, cookie_config):
+        return dataclasses.replace(cookie_config, cookies_on_throttle=True)
+
+    def test_an_instagram_throttle_retries_with_cookies(self, monkeypatch, opted_in):
+        fake = ydl_needing_cookies(self.THROTTLE)
+        monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
+        info = extract.probe("https://www.instagram.com/reel/X/", opted_in)
+        assert fake.calls == ["anonymous", "with_cookies"]
+        assert info.used_cookies is True
+
+    def test_other_platforms_are_left_alone(self, monkeypatch, opted_in):
+        fake = ydl_needing_cookies(self.THROTTLE)
+        monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
+        with pytest.raises(ClipUnavailable):
+            extract.probe("https://www.tiktok.com/@a/video/1", opted_in)
+        assert fake.calls == ["anonymous"]
+
+    def test_off_by_default(self, monkeypatch, cookie_config):
+        fake = ydl_needing_cookies(self.THROTTLE)
+        monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
+        with pytest.raises(ClipUnavailable):
+            extract.probe("https://www.instagram.com/reel/X/", cookie_config)
+        assert fake.calls == ["anonymous"]
+
+    def test_parses_from_env(self, monkeypatch):
+        monkeypatch.setenv("BOT_TOKEN", "1:x")
+        monkeypatch.setenv("COOKIES_ON_THROTTLE", "true")
+        assert load_config().cookies_on_throttle is True
 
 
 class TestDownloadFollowsTheProbe:

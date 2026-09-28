@@ -5,7 +5,7 @@ import logging
 import yt_dlp
 
 from src.core.config import Config
-from src.core.errors import ClipRejected, as_user_error
+from src.core.errors import ClipRejected, ClipUnavailable, as_user_error
 from src.core.limits import ALBUM_MAX_ITEMS
 from src.core.models import ClipInfo, MediaItem, MediaKind
 from src.media import twitter_photos
@@ -17,6 +17,11 @@ log = logging.getLogger(__name__)
 # Failures a logged-in session can plausibly fix. Retrying a network timeout or
 # an over-long clip with cookies would just waste a request.
 COOKIE_RETRY_REASONS = frozenset({"needs_login", "private", "age_restricted"})
+
+# A datacenter IP can be throttled for anonymous Instagram traffic before it
+# makes a single request, where a logged-in session may still get through.
+# Opt-in: it spends the session on every post, which is what gets it flagged.
+THROTTLE_COOKIE_PLATFORMS = frozenset({"instagram"})
 
 
 def _as_clock(seconds: int) -> str:
@@ -87,11 +92,19 @@ def probe(url: str, config: Config) -> ClipInfo:
     """
     try:
         return _probe(url, config, with_cookies=False)
-    except ClipRejected as error:
-        if not (config.cookies_file and error.reason in COOKIE_RETRY_REASONS):
+    except (ClipRejected, ClipUnavailable) as error:
+        if not (config.cookies_file and _cookies_could_help(error, url, config)):
             raise
         log.info("retrying %s with cookies (%s)", url, error.reason)
         return _probe(url, config, with_cookies=True)
+
+
+def _cookies_could_help(error: ClipRejected | ClipUnavailable, url: str,
+                        config: Config) -> bool:
+    if error.reason in COOKIE_RETRY_REASONS:
+        return True
+    return (config.cookies_on_throttle and error.reason == "site_throttled"
+            and platform_of(url) in THROTTLE_COOKIE_PLATFORMS)
 
 
 def _probe(url: str, config: Config, *, with_cookies: bool) -> ClipInfo:

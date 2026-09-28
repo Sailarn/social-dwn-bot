@@ -63,6 +63,7 @@ class Config:
     event_salt: str = ""
     drop_pending_updates: bool = True
     on_render: bool = False
+    cookies_on_throttle: bool = False
 
     @property
     def max_filesize_bytes(self) -> int:
@@ -161,4 +162,5 @@ def load_config() -> Config:
         drop_pending_updates=_bool_env("DROP_PENDING_UPDATES", True),
         # Render sets this itself; it decides where /errors points for the log.
         on_render=_bool_env("RENDER", False),
+        cookies_on_throttle=_bool_env("COOKIES_ON_THROTTLE", False),
     )
