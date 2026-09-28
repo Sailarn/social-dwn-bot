@@ -62,3 +62,17 @@ def test_recovers_on_a_later_attempt():
 
     assert run(flaky, attempts=3) == "recovered"
     assert len(calls) == 3
+
+
+def test_a_throttle_is_not_retried():
+    """Three requests in eight seconds against a 429 only deepens the throttle."""
+    calls = []
+
+    def throttled():
+        calls.append(1)
+        raise ClipUnavailable("the site is rate-limiting us", "site_throttled")
+
+    with pytest.raises(ClipUnavailable) as caught:
+        run(throttled)
+    assert caught.value.reason == "site_throttled"
+    assert len(calls) == 1

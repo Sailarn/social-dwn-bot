@@ -6,6 +6,7 @@ rejected the whole message with "can't find end of the entity".
 """
 
 import asyncio
+import dataclasses
 import re
 import time
 
@@ -130,6 +131,19 @@ class TestErrors:
                          config=admin_config, services=services_for(log))
         assert "grep a3f21c" in message.sent
         assert "&amp;" in message.sent
+        assert_valid_html(message.sent)
+
+    def test_on_render_points_at_the_render_log(self, tmp_path, admin_config):
+        log = EventLog(tmp_path / "e.db", 90, "salt")
+        fingerprint, _ = log.record_error(
+            platform="instagram", error_type="ClipUnavailable", message="429",
+            url="https://instagram.com/reel/X", detail="", request_id="5386ee")
+        config = dataclasses.replace(admin_config, on_render=True)
+        message = render(admin.handle_errors, FakeMessage(f"/errors {fingerprint}"),
+                         config=config, services=services_for(log))
+        assert "Render" in message.sent
+        assert "5386ee" in message.sent
+        assert "pm2" not in message.sent
         assert_valid_html(message.sent)
 
     def test_unknown_id_is_reported(self, tmp_path, admin_config):

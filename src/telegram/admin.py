@@ -72,7 +72,7 @@ async def handle_errors(message: Message, config: Config, services: Services) ->
     reports = Reports(services.events)
     parts = (message.text or "").split()
     if len(parts) > 1:
-        await message.reply(_error_detail(reports, parts[1].strip()),
+        await message.reply(_error_detail(reports, parts[1].strip(), config),
                             parse_mode="HTML")
         return
 
@@ -90,7 +90,17 @@ async def handle_errors(message: Message, config: Config, services: Services) ->
     await message.reply("\n".join(lines), parse_mode="HTML")
 
 
-def _error_detail(reports: Reports, fingerprint: str) -> str:
+def _log_hint(request_id: str, config: Config) -> list[str]:
+    """Where the full log for this request lives, on the host it runs on."""
+    if config.on_render:
+        return ["<b>full log:</b> Render → Logs → search",
+                f"<code>{fmt.esc(request_id)}</code>"]
+    return ["<b>full log on the pi:</b>",
+            f"<code>grep {fmt.esc(request_id)} "
+            f"~/.pm2/logs/social-download-tg-error.log</code>"]
+
+
+def _error_detail(reports: Reports, fingerprint: str, config: Config) -> str:
     row = reports.error_detail(fingerprint)
     if row is None:
         return f"no error with id <code>{fmt.esc(fingerprint)}</code>"
@@ -102,9 +112,7 @@ def _error_detail(reports: Reports, fingerprint: str) -> str:
         f"message: {fmt.esc(row['message'])}",
         f"url: {fmt.esc(row['url'])}",
         "",
-        "<b>full log on the pi:</b>",
-        f"<code>grep {fmt.esc(row['request_id'])} "
-        f"~/.pm2/logs/social-download-tg-error.log</code>",
+        *_log_hint(row["request_id"], config),
         "",
         f"<pre>{fmt.esc((row['detail'] or '')[-600:])}</pre>",
     ])

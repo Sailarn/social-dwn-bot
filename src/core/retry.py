@@ -9,10 +9,15 @@ from src.core.errors import ClipRejected, ClipUnavailable
 log = logging.getLogger(__name__)
 
 FIRST_DELAY_SECONDS = 2
+THROTTLED = "site_throttled"
 
 
 async def with_retries(operation, attempts: int, label: str):
-    """Retry a blocking operation with backoff. ClipRejected is never retried."""
+    """Retry a blocking operation with backoff.
+
+    ClipRejected is never retried, and neither is a throttle: asking again
+    within seconds is what deepens it. The platform cooldown handles it instead.
+    """
     delay_seconds = FIRST_DELAY_SECONDS
     last_error: Exception | None = None
 
@@ -22,6 +27,8 @@ async def with_retries(operation, attempts: int, label: str):
         except ClipRejected:
             raise
         except (ClipUnavailable, OSError, subprocess.SubprocessError) as error:
+            if getattr(error, "reason", None) == THROTTLED:
+                raise
             last_error = error
             log.warning("%s attempt %d/%d failed: %s", label, attempt, attempts, error)
             if attempt < attempts:

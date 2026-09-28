@@ -62,6 +62,7 @@ class Config:
     cookie_warn_days: float = 14.0
     event_salt: str = ""
     drop_pending_updates: bool = True
+    on_render: bool = False
 
     @property
     def max_filesize_bytes(self) -> int:
@@ -158,4 +159,6 @@ def load_config() -> Config:
         heartbeat_interval_seconds=_float_env("HEARTBEAT_INTERVAL_SECONDS", 300.0),
         cookie_warn_days=_float_env("COOKIE_WARN_DAYS", 14.0),
         drop_pending_updates=_bool_env("DROP_PENDING_UPDATES", True),
+        # Render sets this itself; it decides where /errors points for the log.
+        on_render=_bool_env("RENDER", False),
     )
