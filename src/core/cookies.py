@@ -5,7 +5,10 @@ nearly expired. The Netscape format carries the real expiry per cookie, so read
 those and warn before the session goes rather than after posts start failing.
 """
 
+import base64
+import binascii
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -44,3 +47,26 @@ def days_until_expiry(path: Path) -> float | None:
     if not expiries:
         return None
     return (min(expiries) - time.time()) / 86400
+
+
+def write_from_base64(encoded: str, target: Path) -> Path | None:
+    """Decode cookies passed through the environment into a private file.
+
+    Returns None rather than raising: bad cookies must not stop the bot, only
+    the posts that need a login.
+    """
+    try:
+        content = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
+        log.warning("COOKIES_B64 is not valid base64; continuing without cookies")
+        return None
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Created 0600 rather than chmod-ed after, so it is never briefly readable.
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "wb") as file:
+            file.write(content)
+    except OSError as error:
+        log.warning("could not write cookies to %s: %s", target, error)
+        return None
+    return target

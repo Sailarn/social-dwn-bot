@@ -132,9 +132,10 @@ async def main() -> None:
     transcode.configure(config.max_concurrent_transcodes)
     health_runner = await _start_health_server(config.health_host, config.health_port)
 
-    # Clears any webhook left over from another host, and skips the backlog that
-    # piled up while the bot was down.
-    await bot.delete_webhook(drop_pending_updates=True)
+    # Clears any webhook left over from another host. On a home machine the
+    # backlog from a long outage is stale; on a host that restarts on its own,
+    # it is links people are still waiting for (DROP_PENDING_UPDATES=false).
+    await bot.delete_webhook(drop_pending_updates=config.drop_pending_updates)
     log.info("social-download-tg v%s", src.__version__)
     log.info(
         "polling: max %ds, max %dMB, %d concurrent, %d/hour, cache ttl %dd, stats %dd",

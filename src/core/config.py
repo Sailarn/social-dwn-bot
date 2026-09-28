@@ -8,6 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from src.core import cookies
 from src.core.limits import TELEGRAM_UPLOAD_LIMIT_MB
 
 log = logging.getLogger(__name__)
@@ -20,6 +21,11 @@ def _int_env(name: str, default: int) -> int:
 def _float_env(name: str, default: float) -> float:
     raw = os.environ.get(name, "").strip()
     return float(raw) if raw else default
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    return raw in {"1", "true", "yes", "on"} if raw else default
 
 
 def _id_set_env(name: str) -> set[int]:
@@ -55,6 +61,7 @@ class Config:
     heartbeat_interval_seconds: float = 300.0
     cookie_warn_days: float = 14.0
     event_salt: str = ""
+    drop_pending_updates: bool = True
 
     @property
     def max_filesize_bytes(self) -> int:
@@ -79,10 +86,18 @@ class Config:
         return user_id in self.allowed_user_ids or chat_id in self.allowed_chat_ids
 
 
-def _resolve_cookies(configured_path: str) -> Path | None:
-    """A cookies file that was asked for but is missing must not pass silently."""
+def _resolve_cookies(configured_path: str, data_dir: Path) -> Path | None:
+    """A cookies file that was asked for but is missing must not pass silently.
+
+    Hosts with an ephemeral disk cannot keep a file between restarts, so the
+    cookies may instead arrive base64-encoded in COOKIES_B64 and are written
+    out on every start.
+    """
     if not configured_path:
-        return None
+        encoded = os.environ.get("COOKIES_B64", "").strip()
+        if not encoded:
+            return None
+        return cookies.write_from_base64(encoded, data_dir / "cookies.txt")
     path = Path(configured_path)
     if not path.is_file():
         log.warning("COOKIES_FILE is set to %s but there is no file there; "
@@ -105,7 +120,8 @@ def load_config() -> Config:
               file=sys.stderr)
         raise SystemExit(1)
 
-    cookies = _resolve_cookies(os.environ.get("COOKIES_FILE", "").strip())
+    data_dir = Path(os.environ.get("DATA_DIR", "data"))
+    cookies_file = _resolve_cookies(os.environ.get("COOKIES_FILE", "").strip(), data_dir)
 
     admins = _id_set_env("ADMIN_USER_IDS")
     requested_mb = _int_env("MAX_FILESIZE_MB", TELEGRAM_UPLOAD_LIMIT_MB)
@@ -131,8 +147,8 @@ def load_config() -> Config:
         stats_retention_days=_int_env("STATS_RETENTION_DAYS", 90),
         rate_limit_per_hour=_int_env("RATE_LIMIT_PER_HOUR", 30),
         download_attempts=_int_env("DOWNLOAD_ATTEMPTS", 3),
-        data_dir=Path(os.environ.get("DATA_DIR", "data")),
-        cookies_file=cookies,
+        data_dir=data_dir,
+        cookies_file=cookies_file,
         health_port=_int_env("PORT", 7860),
         health_host=os.environ.get("HEALTH_HOST", "0.0.0.0").strip() or "0.0.0.0",
         # Identifiers in the event log are hashed, never stored raw. Deriving the
@@ -141,4 +157,5 @@ def load_config() -> Config:
         heartbeat_url=os.environ.get("HEARTBEAT_URL", "").strip(),
         heartbeat_interval_seconds=_float_env("HEARTBEAT_INTERVAL_SECONDS", 300.0),
         cookie_warn_days=_float_env("COOKIE_WARN_DAYS", 14.0),
+        drop_pending_updates=_bool_env("DROP_PENDING_UPDATES", True),
     )

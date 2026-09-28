@@ -1,5 +1,8 @@
 """Configuration parsing and who is allowed to use the bot."""
 
+import base64
+import stat
+
 import pytest
 
 from src.core.config import Config, load_config
@@ -38,6 +41,58 @@ def test_missing_cookies_file_is_ignored(monkeypatch, tmp_path):
     monkeypatch.setenv("BOT_TOKEN", "1:x")
     monkeypatch.setenv("COOKIES_FILE", str(tmp_path / "nope.txt"))
     assert load_config().cookies_file is None
+
+
+def test_pending_updates_are_dropped_by_default(monkeypatch):
+    """The Pi's behaviour: a long outage's backlog is stale by the time it is back."""
+    monkeypatch.setenv("BOT_TOKEN", "1:x")
+    monkeypatch.delenv("DROP_PENDING_UPDATES", raising=False)
+    assert load_config().drop_pending_updates is True
+
+
+@pytest.mark.parametrize("raw", ["false", "0", "no", "off", "FALSE"])
+def test_pending_updates_can_be_kept(monkeypatch, raw):
+    monkeypatch.setenv("BOT_TOKEN", "1:x")
+    monkeypatch.setenv("DROP_PENDING_UPDATES", raw)
+    assert load_config().drop_pending_updates is False
+
+
+class TestCookiesFromEnvironment:
+    """Hosts with an ephemeral disk pass the cookies in an environment variable."""
+
+    CONTENT = "# Netscape HTTP Cookie File\n.instagram.com\tTRUE\t/\tTRUE\t0\tsessionid\tabc\n"
+
+    @pytest.fixture
+    def env(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("BOT_TOKEN", "1:x")
+        monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+        monkeypatch.setenv("COOKIES_FILE", "")
+        monkeypatch.setenv("COOKIES_B64", base64.b64encode(self.CONTENT.encode()).decode())
+        return tmp_path
+
+    def test_is_written_into_the_data_dir(self, env):
+        path = load_config().cookies_file
+        assert path == env / "data" / "cookies.txt"
+        assert path.read_text() == self.CONTENT
+
+    def test_file_is_private(self, env):
+        mode = stat.S_IMODE(load_config().cookies_file.stat().st_mode)
+        assert mode == 0o600
+
+    def test_an_explicit_file_wins(self, env, monkeypatch):
+        explicit = env / "mine.txt"
+        explicit.write_text("# Netscape HTTP Cookie File\n")
+        monkeypatch.setenv("COOKIES_FILE", str(explicit))
+        assert load_config().cookies_file == explicit
+        assert not (env / "data" / "cookies.txt").exists()
+
+    def test_bad_base64_is_ignored_not_fatal(self, env, monkeypatch):
+        monkeypatch.setenv("COOKIES_B64", "not base64!")
+        assert load_config().cookies_file is None
+
+    def test_neither_set_means_no_cookies(self, env, monkeypatch):
+        monkeypatch.setenv("COOKIES_B64", "")
+        assert load_config().cookies_file is None
 
 
 class TestAccessControl:

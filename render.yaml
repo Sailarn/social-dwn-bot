@@ -1,0 +1,43 @@
+# Render Blueprint: Dashboard -> New -> Blueprint -> pick this repo.
+# Free web service, no card. See docs/HOSTING.md -> Render for the why of each line.
+services:
+  - type: web
+    name: social-download-tg
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Secrets: Render prompts for these on first deploy and never stores them here.
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_USER_IDS
+        sync: false
+      - key: ALLOWED_USER_IDS
+        sync: false
+      - key: ALLOWED_CHAT_IDS
+        sync: false
+      - key: HEARTBEAT_URL
+        sync: false
+      # base64 of cookies.txt; the disk is wiped on every restart.
+      - key: COOKIES_B64
+        sync: false
+
+      # Render restarts on its own; keep the links sent meanwhile.
+      - key: DROP_PENDING_UPDATES
+        value: "false"
+      # 0.1 CPU and a 512 MB cap.
+      - key: MAX_CONCURRENT_DOWNLOADS
+        value: "2"
+      - key: MAX_CONCURRENT_TRANSCODES
+        value: "1"
+      - key: MIN_FREE_MEMORY_MB
+        value: "120"
+      - key: MIN_FREE_DISK_MB
+        value: "300"
+      - key: DATA_DIR
+        value: /data
+      - key: HEALTH_HOST
+        value: 0.0.0.0

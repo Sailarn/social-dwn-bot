@@ -55,6 +55,37 @@ Two things to get right:
 - **Sleeping.** Free tiers that idle out will miss messages while asleep. Telegram
   queues updates for a while, so they usually arrive late rather than never.
 
+### Render (free) — the tested container path
+
+`render.yaml` at the repo root is a Blueprint: Dashboard → New → Blueprint → pick
+the repo, and fill in the secrets it asks for. No card is needed.
+
+The free web service is 512 MB, 0.1 CPU and 750 hours a month **per workspace**.
+One service running all month is ~744 hours, so it fits only if nothing else in
+the workspace runs — suspend any other free service there.
+
+What each setting in the blueprint is for:
+
+- **Sleeping.** A free service sleeps after 15 minutes without an *inbound*
+  request, and polling is outbound, so it counts as idle. Point an external
+  pinger (cron-job.org is free) at `https://<service>.onrender.com/health` every
+  10 minutes. `HEARTBEAT_URL` does not help here: it is outbound too, and it is
+  the alarm for when the service is down, not the thing that keeps it up.
+- **Restarts.** Render restarts and redeploys on its own schedule.
+  `DROP_PENDING_UPDATES=false` keeps the links sent meanwhile, so they arrive
+  late instead of never. A deploy briefly overlaps old and new instances; the
+  new one logs a few `409 Conflict` retries and then takes over.
+- **Cookies.** The disk is wiped on every restart, so a cookies file cannot live
+  there. Put `base64 -i cookies.txt` (Mac) or `base64 -w0 cookies.txt` (Linux)
+  in `COOKIES_B64`; it is written to `DATA_DIR/cookies.txt`, mode 600, at every
+  start. Changing it redeploys the service.
+- **Memory.** The memory floor reads the container's cgroup limit, so it refuses
+  work before the 512 MB cap OOM-kills the process.
+- **CPU.** At 0.1 CPU a re-encode of an over-50 MB clip is slow and can hit the
+  15-minute timeout (`reencode_failed`). Most clips never need one.
+
+Remember: before the first deploy finishes, stop whatever else polls this token.
+
 ### Serverless — a poor fit, and not for the obvious reason
 
 Vercel Functions, AWS Lambda, Cloud Run and friends are built for short request
