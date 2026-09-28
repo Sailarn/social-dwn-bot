@@ -25,6 +25,10 @@ services:
       - key: COOKIES_B64
         sync: false
 
+      # Instagram 429s Render's IP on every anonymous request; retry with the
+      # session. Spends the cookie account on every Instagram post.
+      - key: COOKIES_ON_THROTTLE
+        value: "true"
       # Render restarts on its own; keep the links sent meanwhile.
       - key: DROP_PENDING_UPDATES
         value: "false"

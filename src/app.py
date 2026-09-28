@@ -193,4 +193,14 @@ def run() -> None:
     except asyncio.CancelledError:
         log.info("shutting down")
     finally:
+        _cancel_leftovers(loop)
         loop.close()
+
+
+def _cancel_leftovers(loop: asyncio.AbstractEventLoop) -> None:
+    """aiogram leaves a few internal waits behind; closing the loop over them
+    logs "Task was destroyed but it is pending!" on every shutdown."""
+    leftovers = asyncio.all_tasks(loop)
+    for leftover in leftovers:
+        leftover.cancel()
+    loop.run_until_complete(asyncio.gather(*leftovers, return_exceptions=True))

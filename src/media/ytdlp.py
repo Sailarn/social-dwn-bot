@@ -4,6 +4,7 @@ Probing and downloading must agree on these options, because the download reuses
 the result the probe already extracted.
 """
 
+import logging
 from pathlib import Path
 
 from src.core.config import Config
@@ -26,12 +27,26 @@ ALLOWED_EXTRACTORS = [
 ]
 
 
+class _YtdlpLog:
+    """yt-dlp prints failures straight to stderr, duplicating the warning our
+    own code logs for them with the request id. Keep its output for debugging
+    only, so a post that merely fell back to cookies is not an ERROR line."""
+
+    _log = logging.getLogger("yt_dlp")
+
+    def debug(self, message: str) -> None:
+        self._log.debug(message)
+
+    info = warning = error = debug
+
+
 def _base_options(config: Config, with_cookies: bool) -> dict:
     options = {
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
         "noprogress": True,
+        "logger": _YtdlpLog(),
         "socket_timeout": 30,
         "retries": 3,
         "fragment_retries": 3,
