@@ -5,7 +5,7 @@ import logging
 from aiogram.types import FSInputFile, Message
 from aiogram.utils.media_group import MediaGroupBuilder
 
-from src.core.models import DownloadedItem, MediaKind
+from src.core.models import DownloadedItem, LinkedItem, MediaKind
 
 log = logging.getLogger(__name__)
 
@@ -30,15 +30,25 @@ async def send_cached(message: Message, cached: str) -> MediaKind:
     return MediaKind.VIDEO
 
 
-async def send_one(message: Message, downloaded: DownloadedItem) -> str | None:
+Sendable = DownloadedItem | LinkedItem
+
+
+def _input(entry: Sendable) -> FSInputFile | str:
+    """A file we upload, or a URL Telegram fetches itself."""
+    if isinstance(entry, LinkedItem):
+        return entry.url
+    return FSInputFile(entry.path)
+
+
+async def send_one(message: Message, entry: Sendable) -> str | None:
     """A single-media post keeps the richer video treatment."""
-    item = downloaded.item
+    item = entry.item
     if not item.is_video:
-        sent = await message.reply_photo(FSInputFile(downloaded.path))
+        sent = await message.reply_photo(_input(entry))
         return sent.photo[-1].file_id if sent.photo else None
 
     sent = await message.reply_video(
-        FSInputFile(downloaded.path),
+        _input(entry),
         duration=item.duration_seconds or None,
         width=item.width or None,
         height=item.height or None,
@@ -47,14 +57,14 @@ async def send_one(message: Message, downloaded: DownloadedItem) -> str | None:
     return sent.video.file_id if sent.video else None
 
 
-async def send_album(message: Message, downloaded: list[DownloadedItem]) -> None:
+async def send_album(message: Message, entries: list[Sendable]) -> None:
     """Telegram media groups mix photos and videos, so a carousel arrives whole.
 
     Each item gets its own file_id, so albums are sent but not cached.
     """
     album = MediaGroupBuilder()
-    for entry in downloaded:
-        media = FSInputFile(entry.path)
+    for entry in entries:
+        media = _input(entry)
         if entry.item.is_video:
             album.add_video(media=media)
         else:

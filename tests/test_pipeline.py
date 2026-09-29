@@ -152,3 +152,40 @@ class TestDownload:
         (clip, _), calls = self.run(monkeypatch, config, tmp_path, set())
         assert clip.source == Source.APIFY
         assert calls == [Source.APIFY]
+
+
+class TestSkippingAnonymous:
+    """On Render every anonymous Instagram request is a 429: skip straight to Apify."""
+
+    @pytest.fixture
+    def skipping(self, config):
+        return dataclasses.replace(config, skip_anonymous_platforms=frozenset({"instagram"}))
+
+    def test_goes_straight_to_apify(self, monkeypatch, skipping):
+        steps = Steps(monkeypatch)
+        assert steps.resolve(skipping).source == Source.APIFY
+        assert steps.calls == ["apify"]
+        assert steps.attempt.trail == ["apify"], "stats must not count a skipped step"
+
+    def test_an_apify_failure_still_reaches_cookies(self, monkeypatch, skipping):
+        steps = Steps(monkeypatch,
+                      apify_result=ClipUnavailable("apify found nothing", "apify_failed"))
+        assert steps.resolve(skipping).source == Source.COOKIES
+        assert steps.calls == ["apify", "cookies"]
+
+    def test_without_apify_anonymous_is_not_skipped(self, monkeypatch, skipping):
+        """Skipping must never leave a platform with nothing to try."""
+        steps = Steps(monkeypatch)
+        steps.resolve(dataclasses.replace(skipping, apify_token=""))
+        assert steps.calls[0] == "anonymous"
+
+    def test_other_platforms_are_unaffected(self, monkeypatch, skipping):
+        steps = Steps(monkeypatch, anonymous=info(Source.ANONYMOUS))
+        steps.resolve(skipping, url="https://x.com/u/status/1")
+        assert steps.calls == ["anonymous"]
+
+    def test_parses_from_env(self, monkeypatch):
+        monkeypatch.setenv("BOT_TOKEN", "1:x")
+        monkeypatch.setenv("SKIP_ANONYMOUS_PLATFORMS", "Instagram, tiktok")
+        from src.core.config import load_config
+        assert load_config().skip_anonymous_platforms == {"instagram", "tiktok"}

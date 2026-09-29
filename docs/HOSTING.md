@@ -87,7 +87,13 @@ What each setting in the blueprint is for:
   cookies; `/stats` shows how many each one served. The actor was chosen because
   it returns Instagram's H.264 file: Apify's own Instagram scrapers return the
   VP9 stream, which phones show as a frozen frame and which took minutes of
-  conversion on 0.1 CPU.
+  conversion on 0.1 CPU. `SKIP_ANONYMOUS_PLATFORMS=instagram` skips the
+  anonymous attempt that always fails there.
+- **Sending by URL.** Apify's Instagram CDN links are handed to Telegram to fetch
+  itself when they are progressive H.264 (read from the link's encoding tag) and
+  a HEAD request shows `video/mp4` up to 20 MB or `image/jpeg` up to 5 MB —
+  Telegram's limits for URLs. That skips a download and an upload through the
+  0.1 CPU. If Telegram cannot fetch a link, the file is uploaded as before.
 - **Storage.** The disk is wiped on every deploy, so the re-send cache and the
   stats would start from zero each time. Set `TURSO_DATABASE_URL` and
   `TURSO_AUTH_TOKEN` (Turso's free plan, no card) and both live there instead.

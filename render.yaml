@@ -37,6 +37,9 @@ services:
       # session. Spends the cookie account on every Instagram post.
       - key: COOKIES_ON_THROTTLE
         value: "true"
+      # Every anonymous Instagram request from Render is a 429: go straight to Apify.
+      - key: SKIP_ANONYMOUS_PLATFORMS
+        value: instagram
       # Render restarts on its own; keep the links sent meanwhile.
       - key: DROP_PENDING_UPDATES
         value: "false"

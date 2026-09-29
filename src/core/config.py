@@ -67,6 +67,7 @@ class Config:
     turso_database_url: str = ""
     turso_auth_token: str = ""
     apify_token: str = ""
+    skip_anonymous_platforms: frozenset[str] = frozenset()
 
     @property
     def max_filesize_bytes(self) -> int:
@@ -169,4 +170,6 @@ def load_config() -> Config:
         turso_database_url=os.environ.get("TURSO_DATABASE_URL", "").strip(),
         turso_auth_token=os.environ.get("TURSO_AUTH_TOKEN", "").strip(),
         apify_token=os.environ.get("APIFY_TOKEN", "").strip(),
+        skip_anonymous_platforms=frozenset(
+            os.environ.get("SKIP_ANONYMOUS_PLATFORMS", "").replace(",", " ").lower().split()),
     )

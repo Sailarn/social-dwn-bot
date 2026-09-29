@@ -10,14 +10,14 @@ from pathlib import Path
 
 from aiogram import Bot
 from aiogram.enums import ChatAction
-from aiogram.exceptions import TelegramRetryAfter
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import Message
 
 from src.core.config import Config
 from src.core.errors import ClipRejected, ClipUnavailable, MediaError
-from src.core.models import ClipInfo, Source
+from src.core.models import ClipInfo, LinkedItem, Source
 from src.core.tracing import start_request
-from src.media import links, pipeline
+from src.media import linking, links, pipeline
 from src.storage.stats import Event
 from src.telegram import notify, send
 from src.telegram.services import Services
@@ -169,20 +169,35 @@ async def _fetch_and_send(message, services: Services, attempt: pipeline.Attempt
 async def _download_and_send(
     message: Message, services: Services, attempt: pipeline.Attempt, info: ClipInfo
 ) -> tuple[ClipInfo, str | None, int]:
-    """Fetch every item in the post, send it, and report what was sent: the info
-    it really came from, the file_id and the size."""
+    """Send every item in the post, and report what was sent: the info it really
+    came from, the file_id and the size.
+
+    Telegram fetches qualifying links itself, which skips a download and an
+    upload through a small host. If it cannot, the files go the ordinary way.
+    """
+    linked = await asyncio.to_thread(linking.link_items, info)
+    if linked:
+        try:
+            return (info, *await _send(message, services, info, linked))
+        except TelegramBadRequest as error:
+            log.info("telegram could not fetch %s by url (%s); uploading it instead",
+                     info.key, error)
+
     with tempfile.TemporaryDirectory(prefix="socialdl-") as workdir:
         info, downloaded = await attempt.download(info, Path(workdir))
-        size = sum(entry.path.stat().st_size for entry in downloaded)
-        log.info("sending %s (%s, %d item(s), %d bytes)",
-                 info.key, info.kind.value, len(downloaded), size)
+        return (info, *await _send(message, services, info, downloaded))
 
-        await services.chat_pacer.wait(message.chat.id)
-        if len(downloaded) > 1:
-            await with_flood_retry(lambda: send.send_album(message, downloaded))
-            return info, None, size
-        file_id = await with_flood_retry(lambda: send.send_one(message, downloaded[0]))
-        return info, file_id, size
+
+async def _send(message: Message, services: Services, info: ClipInfo,
+                entries: list[send.Sendable]) -> tuple[str | None, int]:
+    size = sum(entry.size for entry in entries)
+    log.info("sending %s (%s, %d item(s), %d bytes%s)", info.key, info.kind.value,
+             len(entries), size, ", by url" if isinstance(entries[0], LinkedItem) else "")
+    await services.chat_pacer.wait(message.chat.id)
+    if len(entries) > 1:
+        await with_flood_retry(lambda: send.send_album(message, entries))
+        return None, size
+    return await with_flood_retry(lambda: send.send_one(message, entries[0])), size
 
 
 async def _register(services: Services, platform: str, error: Exception,

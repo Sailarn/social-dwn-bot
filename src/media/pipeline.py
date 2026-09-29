@@ -57,13 +57,9 @@ class Attempt:
 
     async def resolve(self) -> ClipInfo:
         """Metadata for the post, from the first step that can read it."""
-        self.trail.append(Source.ANONYMOUS)
-        try:
-            return await with_retries(
-                lambda: extract.probe(self.url, self.config),
-                self.config.download_attempts, "probe")
-        except MediaError as error:
-            failure = error
+        failure = await self._anonymous_or_skip()
+        if isinstance(failure, ClipInfo):
+            return failure
 
         steps = []
         if _apify_could_help(failure, self.url, self.config):
@@ -81,6 +77,26 @@ class Attempt:
                 if isinstance(error, ClipRejected):
                     break
         raise shown
+
+    async def _anonymous_or_skip(self) -> ClipInfo | MediaError:
+        """The anonymous step's result, or its failure for the next steps to go on.
+
+        Skipped for platforms listed in SKIP_ANONYMOUS_PLATFORMS when Apify can
+        take over — on a datacenter IP Instagram answers every anonymous request
+        with a 429, so asking costs a second or two for nothing. Skipping reads as
+        that throttle, so the later steps behave exactly as if it had happened.
+        """
+        platform = platform_of(self.url)
+        if (platform in self.config.skip_anonymous_platforms
+                and apify.applies_to(self.url, self.config)):
+            return ClipUnavailable(f"anonymous skipped for {platform}", "site_throttled")
+        self.trail.append(Source.ANONYMOUS)
+        try:
+            return await with_retries(
+                lambda: extract.probe(self.url, self.config),
+                self.config.download_attempts, "probe")
+        except MediaError as error:
+            return error
 
     async def download(self, info: ClipInfo,
                        workdir: Path) -> tuple[ClipInfo, list[DownloadedItem]]:

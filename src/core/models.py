@@ -83,3 +83,16 @@ class DownloadedItem:
     path: Path
     item: MediaItem
 
+    @property
+    def size(self) -> int:
+        return self.path.stat().st_size
+
+
+@dataclass(frozen=True)
+class LinkedItem:
+    """An item Telegram fetches itself from a URL: no download, no upload."""
+
+    url: str
+    size: int
+    item: MediaItem
+
