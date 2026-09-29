@@ -3,20 +3,21 @@
 import io
 import json
 import urllib.error
+from pathlib import Path
 
 import pytest
 
 from src.core.config import Config
 from src.core.errors import ClipRejected, ClipUnavailable
+from src.core.limits import ALBUM_MAX_ITEMS
 from src.core.models import MediaKind, Source
 from src.media import apify
 
-URL = "https://www.instagram.com/reel/Dd03eq4AfJC/"
-REEL = {"shortCode": "Dd03eq4AfJC", "type": "Video", "caption": "a reel",
-        "videoUrl": "https://scontent.cdninstagram.com/v.mp4", "videoDuration": 12.4,
-        "audioUrl": "https://scontent.cdninstagram.com/a.m4a",
-        "dimensionsWidth": 720, "dimensionsHeight": 1280,
-        "displayUrl": "https://scontent.cdninstagram.com/cover.jpg"}
+URL = "https://www.instagram.com/reel/Dd0684ghXSs/"
+# Real responses from data-slayer/instagram-post-details, trimmed to the fields
+# we read, URLs replaced.
+POSTS = json.loads((Path(__file__).parent / "fixtures" / "apify_posts.json").read_text())
+REEL = POSTS["reel"]
 
 
 @pytest.fixture(autouse=True)
@@ -57,51 +58,43 @@ class TestMapping:
         answer(monkeypatch, [REEL])
         info = apify.probe(URL, config)
         assert info.source == Source.APIFY
-        assert info.key == "Instagram:Dd03eq4AfJC", "must match yt-dlp's key for the cache"
+        assert info.key == "Instagram:Dd0684ghXSs", "must match yt-dlp's key for the cache"
         assert info.only.kind is MediaKind.VIDEO
-        assert info.only.video_url == REEL["videoUrl"]
-        assert info.only.duration_seconds == 12
+        assert info.only.video_url == REEL["video_url"]
+        assert info.only.audio_url is None, "the progressive file carries its audio"
+        assert info.only.duration_seconds == 31
 
-    def test_the_separate_audio_travels_with_the_video(self, monkeypatch, config):
-        """Apify's videoUrl is Instagram's VP9 DASH stream: video only."""
-        answer(monkeypatch, [REEL])
-        assert apify.probe(URL, config).only.audio_url == REEL["audioUrl"]
+    def test_a_photo_post_takes_the_largest_image(self, monkeypatch, config):
+        answer(monkeypatch, [POSTS["photo"]])
+        largest = max(POSTS["photo"]["image_versions"]["items"], key=lambda i: i["width"])
+        assert apify.probe(URL, config).only.image_url == largest["url"]
 
-    def test_a_long_video_is_left_to_the_cookie_route(self, monkeypatch, config):
-        """Converting minutes of VP9 on 0.1 CPU would hit the timeout; cookies
-        get an H.264 file directly."""
-        answer(monkeypatch, [REEL | {"videoDuration": 120}])
-        with pytest.raises(ClipUnavailable) as caught:
-            apify.probe(URL, config)
-        assert caught.value.reason == "apify_too_long"
-
-    def test_a_carousel_keeps_videos_and_photos_in_order(self, monkeypatch, config):
-        answer(monkeypatch, [{"shortCode": "C", "type": "Sidecar", "childPosts": [
-            {"type": "Image", "displayUrl": "https://cdn/1.jpg"},
-            {"type": "Video", "videoUrl": "https://cdn/2.mp4", "videoDuration": 5},
-        ]}])
+    def test_a_video_carousel(self, monkeypatch, config):
+        answer(monkeypatch, [POSTS["video_carousel"]])
         info = apify.probe(URL, config)
-        assert [item.kind for item in info.items] == [MediaKind.PHOTO, MediaKind.VIDEO]
+        assert info.is_album
+        assert all(item.kind is MediaKind.VIDEO for item in info.items)
+        assert len(info.items) == ALBUM_MAX_ITEMS - 1, "9 parts, all kept"
 
-    def test_a_carousel_without_children_uses_its_image_list(self, monkeypatch, config):
-        answer(monkeypatch, [{"shortCode": "C", "type": "Sidecar",
-                              "images": ["https://cdn/1.jpg", "https://cdn/2.jpg"]}])
-        assert len(apify.probe(URL, config).items) == 2
-
-    def test_a_photo_post(self, monkeypatch, config):
-        answer(monkeypatch, [{"shortCode": "P", "type": "Image",
-                              "displayUrl": "https://cdn/p.jpg"}])
-        assert apify.probe(URL, config).only.image_url == "https://cdn/p.jpg"
+    def test_an_image_carousel(self, monkeypatch, config):
+        answer(monkeypatch, [POSTS["image_carousel"]])
+        info = apify.probe(URL, config)
+        assert [item.kind for item in info.items] == [MediaKind.PHOTO] * 8
 
     def test_an_over_long_video_is_refused(self, monkeypatch, config):
-        answer(monkeypatch, [REEL | {"videoDuration": 900}])
+        answer(monkeypatch, [REEL | {"video_duration": 900}])
         with pytest.raises(ClipRejected):
             apify.probe(URL, config)
+
+    def test_the_caption_becomes_the_title(self, monkeypatch, config):
+        answer(monkeypatch, [REEL | {"caption": {"text": "hello"}}])
+        assert apify.probe(URL, config).title == "hello"
 
     @pytest.mark.parametrize("payload", [
         [],
         [{"url": URL, "error": "not_found", "errorDescription": "Restricted profile"}],
-        [{"shortCode": "X", "type": "Video"}],
+        [{"code": "X", "media_type": 2}],
+        [{"media_type": 2, "video_url": "https://cdn/v.mp4"}],
     ])
     def test_nothing_usable_is_a_failure_not_a_verdict(self, monkeypatch, config, payload):
         """So the pipeline moves on to cookies."""
@@ -118,7 +111,7 @@ class TestRequest:
         request = requests[0]
         assert "apify_api_secret" not in request.full_url
         assert request.get_header("Authorization") == "Bearer apify_api_secret"
-        assert json.loads(request.data)["directUrls"] == [URL]
+        assert json.loads(request.data)["postUrls"] == [URL]
 
     def test_a_server_error_is_a_failure(self, monkeypatch, config):
         answer(monkeypatch, status=500, body=b"oops")

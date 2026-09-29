@@ -22,11 +22,8 @@ REENCODE_TIMEOUT_SECONDS = 900
 IMAGE_FETCH_TIMEOUT_SECONDS = 60
 IMAGE_USER_AGENT = "Mozilla/5.0"
 
-# Apify only returns Instagram's VP9 DASH stream, which has to be converted to
-# H.264 — about 2-6 s of CPU per second of video on Render's 0.1 CPU. Longer
-# videos skip Apify for the cookie route, which gets an H.264 file directly,
-# rather than risk the conversion timeout.
-APIFY_MAX_VIDEO_SECONDS = 90
+# A video converted for playability is capped at this frame rate: Instagram's
+# 60 fps streams cost twice the CPU for nothing a phone chat shows.
 CONVERTED_MAX_FPS = 30
 
 # Apify runs a scraper per request: starting it is most of the wait.
@@ -39,7 +36,8 @@ DIRECT_VIDEO_MAX_BYTES = 200 * 1024 * 1024
 DIRECT_FETCH_CHUNK_BYTES = 256 * 1024
 
 # Budgets /stats measures against. Apify's free plan: $5 of credit a month, its
-# Instagram scraper about $0.0027 a post. Render's free plan: 100 GB out a month.
+# Instagram actor (data-slayer/instagram-post-details) about $0.0045 a post:
+# $0.002 to start plus $0.0025 per result. Render's free plan: 100 GB out a month.
 APIFY_MONTHLY_CREDIT_USD = 5.0
-APIFY_COST_PER_RUN_USD = 0.0027
+APIFY_COST_PER_RUN_USD = 0.0045
 RENDER_MONTHLY_BANDWIDTH_BYTES = 100 * 1024 ** 3

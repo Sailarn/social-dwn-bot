@@ -3,12 +3,12 @@
 A datacenter IP gets HTTP 429 from Instagram before it asks for anything, and
 the cookie fallback spends a real account on every post. Apify fetches through
 its own proxies and hands back the post's media URLs, which we then download
-from Instagram's CDN ourselves. Those are always the VP9 DASH stream and a
-separate audio file, so the video is converted to H.264 before it is sent.
+from Instagram's CDN ourselves: the progressive H.264 file every phone plays.
+(Should a source ever hand back another codec, it is converted before sending.)
 
-It is slow — each request starts a scraper run, then the conversion — and
-costs credit, so it sits between the free anonymous attempt and the
-account-spending cookie one.
+It is slower than a direct request — each one starts a scraper run — and costs
+credit, so it sits between the free anonymous attempt and the account-spending
+cookie one.
 
 Any failure here is not final: the pipeline moves on to the next step.
 """
@@ -24,7 +24,6 @@ from src.core.config import Config
 from src.core.errors import ClipRejected, ClipUnavailable
 from src.core.limits import (
     ALBUM_MAX_ITEMS,
-    APIFY_MAX_VIDEO_SECONDS,
     APIFY_RUN_TIMEOUT_SECONDS,
     APIFY_TIMEOUT_SECONDS,
 )
@@ -33,7 +32,11 @@ from src.media.links import platform_of
 
 log = logging.getLogger(__name__)
 
-ACTOR = "apify~instagram-scraper"
+# Returns Instagram's own post object, with the progressive H.264 + AAC video
+# (720p) — not the VP9 DASH stream Apify's own Instagram scrapers return, which
+# needed minutes of conversion on a small host. Chosen 2026-09-29 against four
+# alternatives: cheapest per post (~$0.0045 on the free plan) and most used.
+ACTOR = "data-slayer~instagram-post-details"
 ENDPOINT = f"https://api.apify.com/v2/acts/{ACTOR}/run-sync-get-dataset-items"
 HTTP_PAYMENT_REQUIRED = 402
 # Apify's error types when the plan's monthly credit is spent.
@@ -70,11 +73,7 @@ def _mark_exhausted() -> None:
 
 
 def _run(url: str, config: Config) -> list:
-    body = json.dumps({
-        "directUrls": [url],
-        "resultsType": "posts",
-        "resultsLimit": 1,
-    }).encode()
+    body = json.dumps({"postUrls": [url]}).encode()
     request = urllib.request.Request(
         f"{ENDPOINT}?timeout={APIFY_RUN_TIMEOUT_SECONDS}",
         data=body,
@@ -100,60 +99,64 @@ def _run(url: str, config: Config) -> list:
         raise ClipUnavailable(f"apify request failed: {error}", "apify_failed") from error
 
 
-def _video_item(post: dict, config: Config) -> MediaItem | None:
-    duration = int(post.get("videoDuration") or 0)
+def _video_item(part: dict, config: Config) -> MediaItem | None:
+    duration = int(part.get("video_duration") or 0)
     if duration > config.max_duration_seconds:
         return None
     return MediaItem(
         kind=MediaKind.VIDEO,
-        video_url=post["videoUrl"],
-        # Instagram's DASH video has no audio of its own.
-        audio_url=post.get("audioUrl"),
+        video_url=part["video_url"],
         duration_seconds=duration,
-        width=int(post.get("dimensionsWidth") or 0),
-        height=int(post.get("dimensionsHeight") or 0),
+        width=int(part.get("original_width") or 0),
+        height=int(part.get("original_height") or 0),
     )
 
 
+def _largest_image(part: dict) -> str | None:
+    candidates = [candidate for candidate in
+                  (part.get("image_versions") or {}).get("items") or []
+                  if candidate.get("url")]
+    if candidates:
+        return max(candidates, key=lambda candidate: candidate.get("width") or 0)["url"]
+    return part.get("thumbnail_url")
+
+
 def _items_from(post: dict, config: Config) -> tuple[list[MediaItem], bool]:
-    """(items, some video was too long)."""
-    parts = post.get("childPosts") or [post]
+    """(items, some video was too long). Instagram's own post object: a
+    carousel lists its parts in `carousel_media`; a single post is its own part."""
     items: list[MediaItem] = []
     too_long = False
-    for part in parts:
-        if part.get("videoUrl"):
+    for part in post.get("carousel_media") or [post]:
+        if part.get("video_url"):
             item = _video_item(part, config)
             too_long = too_long or item is None
             if item is not None:
                 items.append(item)
-        elif part.get("displayUrl"):
-            items.append(MediaItem(kind=MediaKind.PHOTO, image_url=part["displayUrl"]))
-    # A carousel sometimes comes back without children, only its image list.
-    if not items and not too_long:
-        items = [MediaItem(kind=MediaKind.PHOTO, image_url=image_url)
-                 for image_url in post.get("images") or []]
+        elif image_url := _largest_image(part):
+            items.append(MediaItem(kind=MediaKind.PHOTO, image_url=image_url))
     return items, too_long
 
 
+def _caption(post: dict) -> str:
+    caption = post.get("caption")
+    text = caption.get("text") if isinstance(caption, dict) else caption
+    return (text or "post")[:100]
+
+
 def probe(url: str, config: Config) -> ClipInfo:
-    """Blocking: one scraper run, typically 10-60 s."""
+    """Blocking: one scraper run, typically 5-20 s."""
     if time.time() < _exhausted_until:
         raise CreditsExhausted(first_time=False)
 
     log.info("asking apify for %s", url)
     results = _run(url, config)
     post = results[0] if results and isinstance(results[0], dict) else None
-    if post is None or post.get("error"):
+    if post is None or post.get("error") or not post.get("code"):
         reason = (post or {}).get("errorDescription") or (post or {}).get("error")
         raise ClipUnavailable(f"apify found nothing ({reason or 'empty result'})",
                               "apify_failed")
 
     items, too_long = _items_from(post, config)
-    longest = max((item.duration_seconds for item in items if item.is_video), default=0)
-    if longest > APIFY_MAX_VIDEO_SECONDS:
-        # Not a verdict: the cookie route gets an H.264 file with no conversion.
-        raise ClipUnavailable(
-            f"{longest}s is too long to convert from apify's VP9", "apify_too_long")
     if not items:
         if too_long:
             raise ClipRejected("clip is over the length limit", "too_long")
@@ -161,8 +164,8 @@ def probe(url: str, config: Config) -> ClipInfo:
 
     return ClipInfo(
         # Same key yt-dlp produces, so the cache matches whichever step fetched it.
-        key=f"Instagram:{post.get('shortCode') or post.get('id')}",
-        title=(post.get("caption") or "post")[:100],
+        key=f"Instagram:{post['code']}",
+        title=_caption(post),
         items=tuple(items[:ALBUM_MAX_ITEMS]),
         source=Source.APIFY,
     )

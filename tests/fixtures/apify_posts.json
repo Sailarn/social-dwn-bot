@@ -1,0 +1,428 @@
+{
+ "reel": {
+  "code": "Dd0684ghXSs",
+  "media_type": 2,
+  "product_type": "clips",
+  "video_url": "https://scontent.cdninstagram.com/fixture/1.mp4",
+  "video_duration": 31.483999252319336,
+  "original_width": 1080,
+  "original_height": 1920,
+  "image_versions": {
+   "items": [
+    {
+     "url": "https://scontent.cdninstagram.com/fixture/2.jpg",
+     "width": 360,
+     "height": 640
+    }
+   ]
+  },
+  "thumbnail_url": "https://scontent.cdninstagram.com/fixture/3.jpg",
+  "caption": {
+   "text": "The Witcher 3 Remastered on Nintendo Switch 2 is fantastic \n"
+  }
+ },
+ "photo": {
+  "code": "Dd0Sqf5F3AK",
+  "media_type": 1,
+  "product_type": "feed",
+  "original_width": 1440,
+  "original_height": 1800,
+  "image_versions": {
+   "items": [
+    {
+     "url": "https://scontent.cdninstagram.com/fixture/4.jpg",
+     "width": 1080,
+     "height": 1350
+    },
+    {
+     "url": "https://scontent.cdninstagram.com/fixture/5.jpg",
+     "width": 360,
+     "height": 450
+    }
+   ]
+  },
+  "thumbnail_url": "https://scontent.cdninstagram.com/fixture/6.jpg",
+  "caption": {
+   "text": "Photo by @marciariederer | Two male weedy sea dragons drift "
+  }
+ },
+ "video_carousel": {
+  "code": "Dd1e6WyCCLZ",
+  "media_type": 8,
+  "product_type": "carousel_container",
+  "original_width": 720,
+  "original_height": 900,
+  "image_versions": {
+   "items": [
+    {
+     "url": "https://scontent.cdninstagram.com/fixture/7.jpg",
+     "width": 360,
+     "height": 450
+    }
+   ]
+  },
+  "thumbnail_url": "https://scontent.cdninstagram.com/fixture/8.jpg",
+  "carousel_media": [
+   {
+    "media_type": 2,
+    "product_type": "carousel_item",
+    "video_url": "https://scontent.cdninstagram.com/fixture/9.mp4",
+    "video_duration": 5.966000080108643,
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/10.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/11.jpg"
+   },
+   {
+    "media_type": 2,
+    "product_type": "carousel_item",
+    "video_url": "https://scontent.cdninstagram.com/fixture/12.mp4",
+    "video_duration": 15.020999908447266,
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/13.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/14.jpg"
+   },
+   {
+    "media_type": 2,
+    "product_type": "carousel_item",
+    "video_url": "https://scontent.cdninstagram.com/fixture/15.mp4",
+    "video_duration": 13.442000389099121,
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/16.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/17.jpg"
+   },
+   {
+    "media_type": 2,
+    "product_type": "carousel_item",
+    "video_url": "https://scontent.cdninstagram.com/fixture/18.mp4",
+    "video_duration": 20.08300018310547,
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/19.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/20.jpg"
+   },
+   {
+    "media_type": 2,
+    "product_type": "carousel_item",
+    "video_url": "https://scontent.cdninstagram.com/fixture/21.mp4",
+    "video_duration": 23.961000442504883,
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/22.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/23.jpg"
+   },
+   {
+    "media_type": 2,
+    "product_type": "carousel_item",
+    "video_url": "https://scontent.cdninstagram.com/fixture/24.mp4",
+    "video_duration": 27.003000259399414,
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/25.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/26.jpg"
+   },
+   {
+    "media_type": 2,
+    "product_type": "carousel_item",
+    "video_url": "https://scontent.cdninstagram.com/fixture/27.mp4",
+    "video_duration": 18.643999099731445,
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/28.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/29.jpg"
+   },
+   {
+    "media_type": 2,
+    "product_type": "carousel_item",
+    "video_url": "https://scontent.cdninstagram.com/fixture/30.mp4",
+    "video_duration": 52.24300003051758,
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/31.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/32.jpg"
+   },
+   {
+    "media_type": 2,
+    "product_type": "carousel_item",
+    "video_url": "https://scontent.cdninstagram.com/fixture/33.mp4",
+    "video_duration": 9.123000144958496,
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/34.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/35.jpg"
+   }
+  ],
+  "caption": {
+   "text": "National Geographic photographer Jasper Doest joined an annu"
+  }
+ },
+ "image_carousel": {
+  "code": "Dd30U6XibLR",
+  "media_type": 8,
+  "product_type": "carousel_container",
+  "original_width": 1080,
+  "original_height": 1350,
+  "image_versions": {
+   "items": [
+    {
+     "url": "https://scontent.cdninstagram.com/fixture/36.jpg",
+     "width": 1080,
+     "height": 1350
+    },
+    {
+     "url": "https://scontent.cdninstagram.com/fixture/37.jpg",
+     "width": 360,
+     "height": 450
+    }
+   ]
+  },
+  "thumbnail_url": "https://scontent.cdninstagram.com/fixture/38.jpg",
+  "carousel_media": [
+   {
+    "media_type": 1,
+    "product_type": "carousel_item",
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/39.jpg",
+       "width": 1080,
+       "height": 1350
+      },
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/40.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/41.jpg"
+   },
+   {
+    "media_type": 1,
+    "product_type": "carousel_item",
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/42.jpg",
+       "width": 1080,
+       "height": 1350
+      },
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/43.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/44.jpg"
+   },
+   {
+    "media_type": 1,
+    "product_type": "carousel_item",
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/45.jpg",
+       "width": 1080,
+       "height": 1350
+      },
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/46.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/47.jpg"
+   },
+   {
+    "media_type": 1,
+    "product_type": "carousel_item",
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/48.jpg",
+       "width": 1080,
+       "height": 1350
+      },
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/49.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/50.jpg"
+   },
+   {
+    "media_type": 1,
+    "product_type": "carousel_item",
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/51.jpg",
+       "width": 1080,
+       "height": 1350
+      },
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/52.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/53.jpg"
+   },
+   {
+    "media_type": 1,
+    "product_type": "carousel_item",
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/54.jpg",
+       "width": 1080,
+       "height": 1350
+      },
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/55.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/56.jpg"
+   },
+   {
+    "media_type": 1,
+    "product_type": "carousel_item",
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/57.jpg",
+       "width": 1080,
+       "height": 1350
+      },
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/58.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/59.jpg"
+   },
+   {
+    "media_type": 1,
+    "product_type": "carousel_item",
+    "original_width": 1080,
+    "original_height": 1350,
+    "image_versions": {
+     "items": [
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/60.jpg",
+       "width": 1080,
+       "height": 1350
+      },
+      {
+       "url": "https://scontent.cdninstagram.com/fixture/61.jpg",
+       "width": 360,
+       "height": 450
+      }
+     ]
+    },
+    "thumbnail_url": "https://scontent.cdninstagram.com/fixture/62.jpg"
+   }
+  ],
+  "caption": {
+   "text": "Rolex is proud to present \u2018Africa Earth\u2019s Wild Home\u2019, a land"
+  }
+ }
+}

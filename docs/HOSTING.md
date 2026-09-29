@@ -80,10 +80,14 @@ What each setting in the blueprint is for:
   in `COOKIES_B64`; it is written to `DATA_DIR/cookies.txt`, mode 600, at every
   start. Changing it redeploys the service.
 - **Instagram.** Render's shared IP gets HTTP 429 from Instagram on every
-  anonymous request. With `APIFY_TOKEN` set, those posts go through Apify's
-  Instagram scraper (its own proxies, ~10–60 s, credit from Apify's free $5/month)
-  and only then to the cookie account (`COOKIES_ON_THROTTLE=true`). The order is
-  anonymous → Apify → cookies; `/stats` shows how many each one served.
+  anonymous request. With `APIFY_TOKEN` set, those posts go through an Apify
+  actor, `data-slayer/instagram-post-details` (its own proxies, ~5–20 s, about
+  $0.0045 a post from Apify's free $5/month), and only then to the cookie
+  account (`COOKIES_ON_THROTTLE=true`). The order is anonymous → Apify →
+  cookies; `/stats` shows how many each one served. The actor was chosen because
+  it returns Instagram's H.264 file: Apify's own Instagram scrapers return the
+  VP9 stream, which phones show as a frozen frame and which took minutes of
+  conversion on 0.1 CPU.
 - **Storage.** The disk is wiped on every deploy, so the re-send cache and the
   stats would start from zero each time. Set `TURSO_DATABASE_URL` and
   `TURSO_AUTH_TOKEN` (Turso's free plan, no card) and both live there instead.
