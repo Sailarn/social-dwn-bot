@@ -3,8 +3,11 @@
 A datacenter IP gets HTTP 429 from Instagram before it asks for anything, and
 the cookie fallback spends a real account on every post. Apify fetches through
 its own proxies and hands back the post's media URLs, which we then download
-from Instagram's CDN ourselves. It is slow — each request starts a scraper
-run — and costs credit, so it sits between the free anonymous attempt and the
+from Instagram's CDN ourselves. Those are always the VP9 DASH stream and a
+separate audio file, so the video is converted to H.264 before it is sent.
+
+It is slow — each request starts a scraper run, then the conversion — and
+costs credit, so it sits between the free anonymous attempt and the
 account-spending cookie one.
 
 Any failure here is not final: the pipeline moves on to the next step.
@@ -21,6 +24,7 @@ from src.core.config import Config
 from src.core.errors import ClipRejected, ClipUnavailable
 from src.core.limits import (
     ALBUM_MAX_ITEMS,
+    APIFY_MAX_VIDEO_SECONDS,
     APIFY_RUN_TIMEOUT_SECONDS,
     APIFY_TIMEOUT_SECONDS,
 )
@@ -103,6 +107,8 @@ def _video_item(post: dict, config: Config) -> MediaItem | None:
     return MediaItem(
         kind=MediaKind.VIDEO,
         video_url=post["videoUrl"],
+        # Instagram's DASH video has no audio of its own.
+        audio_url=post.get("audioUrl"),
         duration_seconds=duration,
         width=int(post.get("dimensionsWidth") or 0),
         height=int(post.get("dimensionsHeight") or 0),
@@ -143,6 +149,11 @@ def probe(url: str, config: Config) -> ClipInfo:
                               "apify_failed")
 
     items, too_long = _items_from(post, config)
+    longest = max((item.duration_seconds for item in items if item.is_video), default=0)
+    if longest > APIFY_MAX_VIDEO_SECONDS:
+        # Not a verdict: the cookie route gets an H.264 file with no conversion.
+        raise ClipUnavailable(
+            f"{longest}s is too long to convert from apify's VP9", "apify_too_long")
     if not items:
         if too_long:
             raise ClipRejected("clip is over the length limit", "too_long")

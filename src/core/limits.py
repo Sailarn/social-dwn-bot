@@ -22,6 +22,13 @@ REENCODE_TIMEOUT_SECONDS = 900
 IMAGE_FETCH_TIMEOUT_SECONDS = 60
 IMAGE_USER_AGENT = "Mozilla/5.0"
 
+# Apify only returns Instagram's VP9 DASH stream, which has to be converted to
+# H.264 — about 2-6 s of CPU per second of video on Render's 0.1 CPU. Longer
+# videos skip Apify for the cookie route, which gets an H.264 file directly,
+# rather than risk the conversion timeout.
+APIFY_MAX_VIDEO_SECONDS = 90
+CONVERTED_MAX_FPS = 30
+
 # Apify runs a scraper per request: starting it is most of the wait.
 APIFY_TIMEOUT_SECONDS = 180
 APIFY_RUN_TIMEOUT_SECONDS = 150

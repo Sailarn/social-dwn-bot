@@ -31,6 +31,8 @@ class MediaItem:
     image_url: str | None = None
     raw: dict | None = field(default=None, repr=False, compare=False)
     video_url: str | None = None
+    # Some sources split a video into a video-only stream and its audio.
+    audio_url: str | None = None
     duration_seconds: int = 0
     width: int = 0
     height: int = 0

@@ -1,9 +1,12 @@
 """Shrinking an oversized clip, and refusing to when it would be wrong."""
 
+import shutil
+import subprocess
+
 import pytest
 
 from src.core.config import Config
-from src.core.errors import ClipRejected
+from src.core.errors import ClipRejected, ClipUnavailable
 from src.media import transcode
 
 
@@ -68,3 +71,70 @@ def test_configure_sets_the_number_of_parallel_encodes():
     assert transcode._transcode_slots._value == 3
     transcode.configure(1)
     assert transcode._transcode_slots._value == 1
+
+
+
+class TestMakePlayable:
+    """Against real ffmpeg: Apify's shape is a VP9 video-only stream plus a
+    separate AAC file, which must come out as one H.264 MP4 with audio."""
+
+    @pytest.fixture
+    def clips(self, tmp_path):
+        if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
+            pytest.skip("needs ffmpeg")
+        encoders = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"],
+                                  capture_output=True, text=True).stdout
+        if "libvpx-vp9" not in encoders or "libx264" not in encoders:
+            pytest.skip("needs libvpx-vp9 and libx264")
+
+        def make(name, *args):
+            path = tmp_path / name
+            subprocess.run(["ffmpeg", "-v", "error", "-y", *args, str(path)], check=True)
+            return path
+
+        h264 = make("h264.mp4", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=30",
+                    "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p")
+        return {
+            "vp9": make("vp9.mp4", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=60",
+                        "-t", "1", "-c:v", "libvpx-vp9", "-deadline", "realtime"),
+            "h264": h264,
+            "audio": make("audio.m4a", "-f", "lavfi", "-i", "sine=frequency=440",
+                          "-t", "1", "-c:a", "aac"),
+            # Side data (a phone's rotation matrix) made ffprobe's csv output
+            # "h264," — which is not "h264", so it was converted for nothing.
+            "rotated": make("rotated.mp4", "-display_rotation", "90", "-i", str(h264),
+                            "-c", "copy"),
+        }
+
+    def streams(self, path):
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+                              "stream=codec_type,codec_name", "-of", "csv=p=0", str(path)],
+                             capture_output=True, text=True).stdout
+        return sorted(line.strip() for line in out.splitlines() if line.strip())
+
+    def test_vp9_with_separate_audio_becomes_h264_with_audio(self, clips, config):
+        result = transcode.make_playable(clips["vp9"], clips["audio"], config)
+        assert self.streams(result) == ["aac,audio", "h264,video"]
+
+    def test_vp9_alone_is_converted(self, clips, config):
+        result = transcode.make_playable(clips["vp9"], None, config)
+        assert self.streams(result) == ["h264,video"]
+
+    def test_h264_with_its_audio_is_left_alone(self, clips, config):
+        assert transcode.make_playable(clips["h264"], None, config) == clips["h264"]
+
+    def test_h264_with_side_data_is_still_recognised(self, clips, config):
+        assert transcode.video_codec(clips["rotated"]) == "h264"
+        assert transcode.make_playable(clips["rotated"], None, config) == clips["rotated"]
+
+    def test_h264_with_separate_audio_is_joined(self, clips, config):
+        result = transcode.make_playable(clips["h264"], clips["audio"], config)
+        assert self.streams(result) == ["aac,audio", "h264,video"]
+
+    def test_unreadable_input_fails_so_the_pipeline_can_move_on(self, tmp_path, config):
+        if not shutil.which("ffmpeg"):
+            pytest.skip("needs ffmpeg")
+        junk = tmp_path / "junk.mp4"
+        junk.write_bytes(b"not a video")
+        with pytest.raises(ClipUnavailable):
+            transcode.make_playable(junk, None, config)

@@ -174,15 +174,37 @@ class TestUnsafeImageUrls:
 class TestDirectVideo:
     """Videos a scraper already extracted: a plain download, no yt-dlp."""
 
-    def video(self):
+    def video(self, audio_url=None):
         return MediaItem(kind=MediaKind.VIDEO, video_url="https://cdn.example/v.mp4",
-                         duration_seconds=10)
+                         audio_url=audio_url, duration_seconds=10)
 
-    def test_is_streamed_to_disk(self, monkeypatch, tmp_path, config):
+    @pytest.fixture(autouse=True)
+    def conversions(self, monkeypatch):
+        """Conversion itself is tested against real ffmpeg in test_transcode."""
+        seen = []
+
+        def make_playable(video, audio, config):
+            seen.append((video.stat().st_size, audio.stat().st_size if audio else None))
+            return video
+
+        monkeypatch.setattr(fetch, "make_playable", make_playable)
+        return seen
+
+    def test_is_streamed_to_disk_and_made_playable(self, monkeypatch, tmp_path, config,
+                                                    conversions):
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen(b"\x00" * 1000))
         [item] = fetch.download_items("https://instagram.com/reel/X", info_of(self.video()),
                                       tmp_path, config)
         assert item.path.stat().st_size == 1000
+        assert conversions == [(1000, None)]
+
+    def test_separate_audio_is_fetched_and_joined(self, monkeypatch, tmp_path, config,
+                                                  conversions):
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen(b"\x00" * 500))
+        fetch.download_items("https://instagram.com/reel/X",
+                             info_of(self.video(audio_url="https://cdn.example/a.m4a")),
+                             tmp_path, config)
+        assert conversions == [(500, 500)]
 
     def test_a_huge_file_is_refused_not_filled(self, monkeypatch, tmp_path, config):
         monkeypatch.setattr(fetch, "DIRECT_VIDEO_MAX_BYTES", 500)

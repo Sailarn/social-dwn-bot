@@ -21,7 +21,7 @@ from src.core.limits import (
 from src.core.models import ClipInfo, DownloadedItem, MediaItem
 from src.core.resources import ensure_disk
 from src.core.urlguard import UnsafeUrl, ensure_safe
-from src.media.transcode import shrink_to_limit
+from src.media.transcode import make_playable, shrink_to_limit
 from src.media.ytdlp import media_options
 
 log = logging.getLogger(__name__)
@@ -54,14 +54,26 @@ def fetch_into(ydl: yt_dlp.YoutubeDL, url: str, raw: dict | None) -> None:
 def _download_video(url: str, item: MediaItem, destination: Path,
                     config: Config, *, with_cookies: bool) -> Path:
     if item.video_url:
-        path = _fetch_direct(item.video_url, destination / "video.mp4",
-                             DIRECT_VIDEO_MAX_BYTES, "video")
+        path = _download_direct_video(item, destination, config)
     else:
         path = _download_with_ytdlp(url, item, destination, config,
                                     with_cookies=with_cookies)
     if path.stat().st_size > config.max_filesize_bytes:
         path = shrink_to_limit(path, item.duration_seconds, config)
     return path
+
+
+def _download_direct_video(item: MediaItem, destination: Path, config: Config) -> Path:
+    """A scraper's video URL: not chosen by our format selector, so its codec is
+    whatever the source serves — for Instagram via Apify, VP9 with separate
+    audio. Made playable before it is sent."""
+    video = _fetch_direct(item.video_url, destination / "video.mp4",
+                          DIRECT_VIDEO_MAX_BYTES, "video")
+    audio = None
+    if item.audio_url:
+        audio = _fetch_direct(item.audio_url, destination / "audio.m4a",
+                              DIRECT_VIDEO_MAX_BYTES, "audio")
+    return make_playable(video, audio, config)
 
 
 def _download_with_ytdlp(url: str, item: MediaItem, destination: Path,

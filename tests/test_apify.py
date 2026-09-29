@@ -14,6 +14,7 @@ from src.media import apify
 URL = "https://www.instagram.com/reel/Dd03eq4AfJC/"
 REEL = {"shortCode": "Dd03eq4AfJC", "type": "Video", "caption": "a reel",
         "videoUrl": "https://scontent.cdninstagram.com/v.mp4", "videoDuration": 12.4,
+        "audioUrl": "https://scontent.cdninstagram.com/a.m4a",
         "dimensionsWidth": 720, "dimensionsHeight": 1280,
         "displayUrl": "https://scontent.cdninstagram.com/cover.jpg"}
 
@@ -60,6 +61,19 @@ class TestMapping:
         assert info.only.kind is MediaKind.VIDEO
         assert info.only.video_url == REEL["videoUrl"]
         assert info.only.duration_seconds == 12
+
+    def test_the_separate_audio_travels_with_the_video(self, monkeypatch, config):
+        """Apify's videoUrl is Instagram's VP9 DASH stream: video only."""
+        answer(monkeypatch, [REEL])
+        assert apify.probe(URL, config).only.audio_url == REEL["audioUrl"]
+
+    def test_a_long_video_is_left_to_the_cookie_route(self, monkeypatch, config):
+        """Converting minutes of VP9 on 0.1 CPU would hit the timeout; cookies
+        get an H.264 file directly."""
+        answer(monkeypatch, [REEL | {"videoDuration": 120}])
+        with pytest.raises(ClipUnavailable) as caught:
+            apify.probe(URL, config)
+        assert caught.value.reason == "apify_too_long"
 
     def test_a_carousel_keeps_videos_and_photos_in_order(self, monkeypatch, config):
         answer(monkeypatch, [{"shortCode": "C", "type": "Sidecar", "childPosts": [
