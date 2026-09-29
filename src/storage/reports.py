@@ -1,7 +1,5 @@
 """Reading the event log back: the numbers behind /stats and /errors."""
 
-import sqlite3
-
 from src.storage.stats import SECONDS_PER_DAY, EventLog
 
 
@@ -51,11 +49,11 @@ class Reports:
             f" GROUP BY chat_hash ORDER BY n DESC LIMIT {int(limit)}")
         return [(row["chat_hash"], row["n"]) for row in rows]
 
-    def recent_errors(self, limit: int = 10) -> list[sqlite3.Row]:
+    def recent_errors(self, limit: int = 10) -> list[dict]:
         return self._events.query(
             "SELECT * FROM error_signatures ORDER BY last_seen DESC LIMIT ?", (limit,))
 
-    def error_detail(self, fingerprint: str) -> sqlite3.Row | None:
+    def error_detail(self, fingerprint: str) -> dict | None:
         rows = self._events.query(
             "SELECT * FROM error_signatures WHERE fingerprint = ?", (fingerprint,))
         return rows[0] if rows else None

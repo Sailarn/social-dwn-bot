@@ -5,6 +5,7 @@ raising, a Telegram API rejection — used to surface only in the Pi log, which 
 exactly where a bug hides when nobody is grepping.
 """
 
+import asyncio
 import logging
 import traceback
 
@@ -25,7 +26,8 @@ async def record_unhandled(event: ErrorEvent, services: Services) -> bool:
     error = event.exception
     log.exception("unhandled error while processing an update: %s", error)
     try:
-        fingerprint, is_new = services.events.record_error(
+        fingerprint, is_new = await asyncio.to_thread(
+            services.events.record_error,
             platform="bot",
             error_type=type(error).__name__,
             message=str(error),

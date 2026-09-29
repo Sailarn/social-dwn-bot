@@ -6,11 +6,12 @@ import pytest
 
 from src.storage.reports import Reports
 from src.storage.stats import Event, EventLog, fingerprint_of
+from src.storage.database import Database
 
 
 @pytest.fixture
 def events(tmp_path):
-    return EventLog(tmp_path / "events.db", retention_days=90, salt="pepper")
+    return EventLog(Database.local(tmp_path / "events.db"), retention_days=90, salt="pepper")
 
 
 class TestFingerprint:
@@ -83,8 +84,8 @@ class TestPrivacy:
         assert Reports(events).summary(30)["chats"] == 2
 
     def test_a_different_salt_gives_a_different_hash(self, tmp_path):
-        one = EventLog(tmp_path / "a.db", 90, salt="one")
-        two = EventLog(tmp_path / "b.db", 90, salt="two")
+        one = EventLog(Database.local(tmp_path / "a.db"), 90, salt="one")
+        two = EventLog(Database.local(tmp_path / "b.db"), 90, salt="two")
         assert one._hash(42) != two._hash(42)
 
 
@@ -124,7 +125,7 @@ class TestSummary:
 
 def test_unwritable_path_disables_the_log_instead_of_crashing():
     from pathlib import Path
-    events = EventLog(Path("/proc/nope/events.db"), 90, "salt")
+    events = EventLog(Database.local(Path("/proc/nope/events.db")), 90, "salt")
     events.record(Event(outcome="sent"))          # must not raise
     fingerprint, is_new = events.record_error(
         platform="x", error_type="E", message="m", url="u", detail="d", request_id="r")

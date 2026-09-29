@@ -79,6 +79,10 @@ What each setting in the blueprint is for:
   there. Put `base64 -i cookies.txt` (Mac) or `base64 -w0 cookies.txt` (Linux)
   in `COOKIES_B64`; it is written to `DATA_DIR/cookies.txt`, mode 600, at every
   start. Changing it redeploys the service.
+- **Storage.** The disk is wiped on every deploy, so the re-send cache and the
+  stats would start from zero each time. Set `TURSO_DATABASE_URL` and
+  `TURSO_AUTH_TOKEN` (Turso's free plan, no card) and both live there instead.
+  Pick a Turso region near the Render one; every lookup is a network round trip.
 - **Memory.** The memory floor reads the container's cgroup limit, so it refuses
   work before the 512 MB cap OOM-kills the process.
 - **CPU.** At 0.1 CPU a re-encode of an over-50 MB clip is slow and can hit the

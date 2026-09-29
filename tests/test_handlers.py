@@ -12,6 +12,7 @@ from src.storage.ratelimit import RateLimiter
 from src.storage.stats import EventLog
 from src.telegram import handlers
 from src.telegram.services import Services
+from src.storage.database import Database
 
 LINK = "https://instagram.com/p/ABC/"
 ME, STRANGER, GROUP = 111111111, 999, -100
@@ -21,9 +22,9 @@ ME, STRANGER, GROUP = 111111111, 999, -100
 def rig(tmp_path, monkeypatch):
     class Rig:
         def __init__(self):
-            self.events = EventLog(tmp_path / "e.db", 90, "salt")
+            self.events = EventLog(Database.local(tmp_path / "e.db"), 90, "salt")
             self.services = Services(
-                cache=FileIdCache(tmp_path / "c.db", 30), events=self.events,
+                cache=FileIdCache(Database.local(tmp_path / "c.db"), 30), events=self.events,
                 chat_pacer=Pacer(0), platform_pacer=PlatformPacer(0, 60), notifier=FakeNotifier())
             self.delivered: list[str] = []
             monkeypatch.setattr(handlers, "deliver_clip", self._deliver)

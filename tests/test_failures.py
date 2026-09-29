@@ -8,6 +8,7 @@ from src.storage.reports import Reports
 from src.storage.stats import EventLog
 from src.telegram import failures
 from src.telegram.services import Services
+from src.storage.database import Database
 
 
 def services_with(events):
@@ -22,7 +23,7 @@ class FakeErrorEvent:
 
 
 def test_an_unhandled_error_is_registered(tmp_path):
-    events = EventLog(tmp_path / "e.db", 90, "salt")
+    events = EventLog(Database.local(tmp_path / "e.db"), 90, "salt")
     handled = asyncio.run(failures.record_unhandled(
         FakeErrorEvent(RuntimeError("boom")), services_with(events)))
     assert handled is True
@@ -34,7 +35,7 @@ def test_an_unhandled_error_is_registered(tmp_path):
 
 
 def test_the_same_bug_twice_is_one_signature(tmp_path):
-    events = EventLog(tmp_path / "e.db", 90, "salt")
+    events = EventLog(Database.local(tmp_path / "e.db"), 90, "salt")
     for _ in range(3):
         asyncio.run(failures.record_unhandled(
             FakeErrorEvent(ValueError("same fault")), services_with(events)))

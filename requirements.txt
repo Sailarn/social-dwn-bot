@@ -2,3 +2,5 @@ aiogram>=3.15,<4
 yt-dlp>=2025.1.15
 aiohttp>=3.10
 python-dotenv>=1.0
+# Turso storage (Render). Only x86_64 has wheels; the Pi (ARM) keeps local SQLite.
+libsql>=0.1.11; platform_machine == "x86_64"

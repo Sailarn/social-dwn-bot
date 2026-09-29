@@ -62,7 +62,7 @@ async def handle_possible_link(
 
     if not rate_limiter.allow(message.from_user.id):
         wait_minutes = max(rate_limiter.seconds_until_free(message.from_user.id) // 60, 1)
-        services.events.record(Event(
+        await asyncio.to_thread(services.events.record, Event(
             outcome="rate_limited", reason="rate_limited",
             platform=platform_of(url),
             chat_id=message.chat.id, user_id=message.from_user.id,

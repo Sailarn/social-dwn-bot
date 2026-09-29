@@ -36,7 +36,12 @@ def _denied(message: Message, config: Config) -> bool:
 async def handle_stats(message: Message, config: Config, services: Services) -> None:
     if _denied(message, config):
         return
-    reports = Reports(services.events)
+    # Storage may be remote: build the report off the event loop.
+    text = await asyncio.to_thread(_stats_text, Reports(services.events))
+    await message.reply(text, parse_mode="HTML")
+
+
+def _stats_text(reports: Reports) -> str:
     lines = ["📊 <b>usage</b>", "<pre>"]
     lines.append(f"{'':<10}{'24h':>7}{'7d':>7}{'30d':>7}")
     windows = [reports.summary(1), reports.summary(7), reports.summary(30)]
@@ -62,24 +67,26 @@ async def handle_stats(message: Message, config: Config, services: Services) -> 
     if len(busiest) > 1:
         lines.append("\n<b>busiest chats</b> (30d)")
         lines += [f"· {fmt.esc(chat_hash[:6])} × {count}" for chat_hash, count in busiest]
-    await message.reply("\n".join(lines), parse_mode="HTML")
+    return "\n".join(lines)
 
 
 @router.message(Command("errors"))
 async def handle_errors(message: Message, config: Config, services: Services) -> None:
     if _denied(message, config):
         return
-    reports = Reports(services.events)
     parts = (message.text or "").split()
-    if len(parts) > 1:
-        await message.reply(_error_detail(reports, parts[1].strip(), config),
-                            parse_mode="HTML")
-        return
+    fingerprint = parts[1].strip() if len(parts) > 1 else None
+    text = await asyncio.to_thread(
+        _errors_text, Reports(services.events), fingerprint, config)
+    await message.reply(text, parse_mode="HTML")
 
+
+def _errors_text(reports: Reports, fingerprint: str | None, config: Config) -> str:
+    if fingerprint is not None:
+        return _error_detail(reports, fingerprint, config)
     rows = reports.recent_errors(RECENT_ERROR_LIMIT)
     if not rows:
-        await message.reply("✅ no errors recorded")
-        return
+        return "✅ no errors recorded"
     lines = [f"⚠️ <b>{len(rows)} unique error(s)</b>"]
     for row in rows:
         lines.append(
@@ -87,7 +94,7 @@ async def handle_errors(message: Message, config: Config, services: Services) ->
             f"{fmt.esc(row['platform'])} · {fmt.ago(row['last_seen'])}\n"
             f"{fmt.esc(row['message'][:90])}")
     lines.append("\n<code>/errors &lt;id&gt;</code> for detail")
-    await message.reply("\n".join(lines), parse_mode="HTML")
+    return "\n".join(lines)
 
 
 def _log_hint(request_id: str, config: Config) -> list[str]:
@@ -128,7 +135,7 @@ async def handle_health(message: Message, config: Config, services: Services,
     free_gb = free_disk_bytes(config.data_dir) / 1024 ** 3
     memory = available_memory_bytes()
     memory_line = f" · {memory / 1024 ** 2:.0f}MB free ram" if memory else ""
-    event_rows, error_rows = services.events.counts()
+    event_rows, error_rows = await asyncio.to_thread(services.events.counts)
     await message.reply("\n".join([
         f"🩺 <b>health</b> · v{fmt.esc(src.__version__)}",
         f"up {fmt.duration(time.time() - started_at)} · rss {rss_mb:.0f}MB · "

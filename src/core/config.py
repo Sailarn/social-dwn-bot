@@ -64,6 +64,8 @@ class Config:
     drop_pending_updates: bool = True
     on_render: bool = False
     cookies_on_throttle: bool = False
+    turso_database_url: str = ""
+    turso_auth_token: str = ""
 
     @property
     def max_filesize_bytes(self) -> int:
@@ -163,4 +165,6 @@ def load_config() -> Config:
         # Render sets this itself; it decides where /errors points for the log.
         on_render=_bool_env("RENDER", False),
         cookies_on_throttle=_bool_env("COOKIES_ON_THROTTLE", False),
+        turso_database_url=os.environ.get("TURSO_DATABASE_URL", "").strip(),
+        turso_auth_token=os.environ.get("TURSO_AUTH_TOKEN", "").strip(),
     )

@@ -72,7 +72,8 @@ async def deliver_clip(
                         traceback.format_exc())
         await message.reply("⚠️ something went wrong, try again")
     finally:
-        services.events.record(Event(
+        # Storage may be remote: never block the event loop on it.
+        await asyncio.to_thread(services.events.record, Event(
             outcome=record["outcome"],
             platform=platform,
             kind=record["kind"],
@@ -91,7 +92,7 @@ async def _run(message, bot, config, services: Services, url, record) -> None:
 
     # Fast path: the same link already sent. Skips the metadata lookup entirely,
     # which is what makes a repeat post genuinely instant.
-    cached = cache.get(url_key)
+    cached = await asyncio.to_thread(cache.get, url_key)
     if cached:
         await services.chat_pacer.wait(message.chat.id)
         kind = await with_flood_retry(lambda: send.send_cached(message, cached))
@@ -104,9 +105,9 @@ async def _run(message, bot, config, services: Services, url, record) -> None:
     record["kind"] = info.kind.value
 
     # Slower path: a different URL for something already sent.
-    cached = cache.get(info.key)
+    cached = await asyncio.to_thread(cache.get, info.key)
     if cached:
-        cache.put(url_key, cached)
+        await asyncio.to_thread(cache.put, url_key, cached)
         await services.chat_pacer.wait(message.chat.id)
         await with_flood_retry(lambda: send.send_cached(message, cached))
         record["outcome"] = "cache_hit"
@@ -116,8 +117,8 @@ async def _run(message, bot, config, services: Services, url, record) -> None:
     record.update(outcome="sent", bytes=size)
     if file_id:
         value = send.cache_value(info.kind, file_id)
-        cache.put(info.key, value)
-        cache.put(url_key, value)
+        await asyncio.to_thread(cache.put, info.key, value)
+        await asyncio.to_thread(cache.put, url_key, value)
 
 
 async def _download_and_send(
@@ -141,7 +142,8 @@ async def _download_and_send(
 
 async def _register(services: Services, platform: str, error: Exception,
                     url: str, request_id: str, detail: str) -> None:
-    fingerprint, is_new = services.events.record_error(
+    fingerprint, is_new = await asyncio.to_thread(
+        services.events.record_error,
         platform=platform,
         error_type=type(error).__name__,
         message=str(error),

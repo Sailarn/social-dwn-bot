@@ -16,6 +16,7 @@ from src.core.pacing import Pacer, PlatformPacer
 from src.core.tracing import RequestIdFilter
 from src.media import transcode
 from src.storage.cache import FileIdCache
+from src.storage.database import Database
 from src.storage.ratelimit import RateLimiter
 from src.storage.stats import EventLog
 from src.telegram import admin, failures, handlers
@@ -94,15 +95,29 @@ def _build_dispatcher() -> Dispatcher:
     return dispatcher
 
 
+def _open_databases(config: Config) -> tuple[Database | None, Database | None]:
+    """(cache, events). Turso holds both when configured, so they survive a
+    host whose disk is wiped on deploy; otherwise one local file each."""
+    if config.turso_database_url:
+        remote = Database.turso(config.turso_database_url, config.turso_auth_token)
+        if remote is not None:
+            log.info("storage: turso (%s)", config.turso_database_url)
+            return remote, remote
+        log.warning("storage: turso unavailable, falling back to local files; "
+                    "stats and cache will not survive a redeploy")
+    return (Database.local(config.data_dir / "sent_clips.db"),
+            Database.local(config.data_dir / "events.db"))
+
+
 def _open_storage(config: Config) -> tuple[FileIdCache, EventLog]:
-    cache = FileIdCache(config.data_dir / "sent_clips.db", config.cache_ttl_days)
+    cache_database, events_database = _open_databases(config)
+    cache = FileIdCache(cache_database, config.cache_ttl_days)
     expired = cache.prune()
     if expired:
         log.info("pruned %d cache entries older than %d days",
                  expired, config.cache_ttl_days)
 
-    events = EventLog(config.data_dir / "events.db",
-                      config.stats_retention_days, config.event_salt)
+    events = EventLog(events_database, config.stats_retention_days, config.event_salt)
     dropped = events.prune()
     if dropped:
         log.info("pruned %d events older than %d days",

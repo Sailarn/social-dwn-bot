@@ -18,6 +18,7 @@ from src.storage.reports import Reports
 from src.storage.stats import EventLog
 from src.telegram import delivery
 from src.telegram.services import Services
+from src.storage.database import Database
 
 URL = "https://instagram.com/p/ABC/"
 
@@ -27,8 +28,8 @@ def rig(tmp_path, monkeypatch):
     class Rig:
         def __init__(self):
             self.config = Config(bot_token="x", data_dir=tmp_path)
-            self.cache = FileIdCache(tmp_path / "c.db", 30)
-            self.events = EventLog(tmp_path / "e.db", 90, "salt")
+            self.cache = FileIdCache(Database.local(tmp_path / "c.db"), 30)
+            self.events = EventLog(Database.local(tmp_path / "e.db"), 90, "salt")
             self.services = Services(
                 cache=self.cache, events=self.events,
                 chat_pacer=Pacer(0), platform_pacer=PlatformPacer(0, 60), notifier=FakeNotifier())

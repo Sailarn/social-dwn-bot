@@ -19,6 +19,7 @@ from src.storage.cache import FileIdCache
 from src.storage.stats import Event, EventLog
 from src.telegram import admin
 from src.telegram.services import Services
+from src.storage.database import Database
 
 
 def services_for(events, cache=None):
@@ -45,7 +46,7 @@ class FakeMessage:
 
 @pytest.fixture
 def events(tmp_path):
-    log = EventLog(tmp_path / "e.db", 90, "salt")
+    log = EventLog(Database.local(tmp_path / "e.db"), 90, "salt")
     for _ in range(3):
         log.record(Event(outcome="sent", platform="instagram", kind="video",
                          total_ms=2400, bytes=3_000_000, chat_id=-100, user_id=1))
@@ -95,7 +96,7 @@ class TestStats:
         assert "rate_limited" in message.sent
 
     def test_an_empty_log_still_renders(self, tmp_path, admin_config):
-        empty = EventLog(tmp_path / "empty.db", 90, "salt")
+        empty = EventLog(Database.local(tmp_path / "empty.db"), 90, "salt")
         message = render(admin.handle_stats, FakeMessage("/stats"),
                          config=admin_config, services=services_for(empty))
         assert_valid_html(message.sent)
@@ -103,14 +104,14 @@ class TestStats:
 
 class TestErrors:
     def test_no_errors_message(self, tmp_path, admin_config):
-        empty = EventLog(tmp_path / "empty.db", 90, "salt")
+        empty = EventLog(Database.local(tmp_path / "empty.db"), 90, "salt")
         message = render(admin.handle_errors, FakeMessage("/errors"),
                          config=admin_config, services=services_for(empty))
         assert "no errors" in message.sent
 
     def test_listing_escapes_hostile_text(self, tmp_path, admin_config):
         """An error message containing HTML must not become markup."""
-        log = EventLog(tmp_path / "e.db", 90, "salt")
+        log = EventLog(Database.local(tmp_path / "e.db"), 90, "salt")
         log.record_error(platform="instagram", error_type="ClipUnavailable",
                          message="<b>boom</b> & <script>x</script>",
                          url="https://x/?a=1&b=2", detail="trace <here>",
@@ -122,7 +123,7 @@ class TestErrors:
         assert_valid_html(message.sent)
 
     def test_detail_escapes_and_gives_the_grep(self, tmp_path, admin_config):
-        log = EventLog(tmp_path / "e.db", 90, "salt")
+        log = EventLog(Database.local(tmp_path / "e.db"), 90, "salt")
         fingerprint, _ = log.record_error(
             platform="tiktok", error_type="ClipUnavailable", message="rehydration & co",
             url="https://vm.tiktok.com/Z", detail="Traceback <most recent>",
@@ -134,7 +135,7 @@ class TestErrors:
         assert_valid_html(message.sent)
 
     def test_on_render_points_at_the_render_log(self, tmp_path, admin_config):
-        log = EventLog(tmp_path / "e.db", 90, "salt")
+        log = EventLog(Database.local(tmp_path / "e.db"), 90, "salt")
         fingerprint, _ = log.record_error(
             platform="instagram", error_type="ClipUnavailable", message="429",
             url="https://instagram.com/reel/X", detail="", request_id="5386ee")
@@ -147,7 +148,7 @@ class TestErrors:
         assert_valid_html(message.sent)
 
     def test_unknown_id_is_reported(self, tmp_path, admin_config):
-        log = EventLog(tmp_path / "e.db", 90, "salt")
+        log = EventLog(Database.local(tmp_path / "e.db"), 90, "salt")
         message = render(admin.handle_errors, FakeMessage("/errors nosuch"),
                          config=admin_config, services=services_for(log))
         assert "no error with id" in message.sent
@@ -158,7 +159,7 @@ class TestHealth:
     def test_renders(self, events, admin_config, tmp_path):
         message = render(
             admin.handle_health, FakeMessage("/health"), config=admin_config,
-            services=services_for(events, FileIdCache(tmp_path / "c.db", 30)),
+            services=services_for(events, FileIdCache(Database.local(tmp_path / "c.db"), 30)),
             download_slots=asyncio.Semaphore(2), started_at=time.time() - 100)
         assert_valid_html(message.sent)
         assert "yt-dlp" in message.sent

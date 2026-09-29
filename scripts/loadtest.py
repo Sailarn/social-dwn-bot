@@ -30,6 +30,7 @@ from src.storage.ratelimit import RateLimiter
 from src.storage.stats import EventLog
 from src.telegram import delivery, handlers
 from src.telegram.services import Services
+from src.storage.database import Database
 
 async def sample_latency(url: str, stop: asyncio.Event, samples: list,
                          interval: float = 0.5) -> None:
@@ -92,8 +93,8 @@ class Rig:
         settings.update(overrides)
         self.config = Config(**settings)
         self.services = Services(
-            cache=FileIdCache(workdir / "cache.db", 30),
-            events=EventLog(workdir / "events.db", 90, "salt"),
+            cache=FileIdCache(Database.local(workdir / "cache.db"), 30),
+            events=EventLog(Database.local(workdir / "events.db"), 90, "salt"),
             chat_pacer=Pacer(self.config.chat_send_interval_seconds),
             platform_pacer=PlatformPacer(self.config.platform_interval_seconds,
                                          self.config.platform_cooldown_seconds),
