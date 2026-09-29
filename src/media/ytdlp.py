@@ -64,14 +64,23 @@ def _base_options(config: Config, with_cookies: bool) -> dict:
     return options
 
 
+# VP8/VP9/AV1 in an MP4 plays as a frozen first frame with sound in many
+# Telegram clients. Instagram's DASH streams are all VP9, so they are refused;
+# its progressive MP4s are H.264. The `?` keeps formats with no codec label
+# (Instagram's progressive files), which are the ones we want.
+PLAYABLE_VIDEO = "[vcodec!^=?vp8][vcodec!^=?vp9][vcodec!^=?vp09][vcodec!^=?av01]"
+
+
 def _format_selector(size_target_bytes: int) -> str:
     ceiling = f"{size_target_bytes}"
+    video = f"bv*{PLAYABLE_VIDEO}"
+    combined = f"b{PLAYABLE_VIDEO}"
     return (
-        f"bv*[filesize<={ceiling}][ext=mp4]+ba[ext=m4a]/"
-        f"b[filesize<={ceiling}][ext=mp4]/"
-        f"bv*[filesize_approx<={ceiling}]+ba/"
-        f"b[filesize_approx<={ceiling}]/"
-        f"b[ext=mp4]/b"
+        f"{video}[filesize<={ceiling}][ext=mp4]+ba[ext=m4a]/"
+        f"{combined}[filesize<={ceiling}][ext=mp4]/"
+        f"{video}[filesize_approx<={ceiling}]+ba/"
+        f"{combined}[filesize_approx<={ceiling}]/"
+        f"{combined}[ext=mp4]/{combined}/b"
     )
 
 
