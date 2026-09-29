@@ -1,4 +1,5 @@
-"""Getting the actual bytes: video via yt-dlp, images over plain HTTP."""
+"""Getting the actual bytes: video via yt-dlp, images and pre-extracted
+videos over plain HTTP."""
 
 import logging
 import re
@@ -11,6 +12,8 @@ from src.core.config import Config
 from src.core.errors import ClipRejected, ClipUnavailable, as_user_error
 from src.core.limits import (
     ALBUM_TOTAL_BYTES,
+    DIRECT_FETCH_CHUNK_BYTES,
+    DIRECT_VIDEO_MAX_BYTES,
     IMAGE_FETCH_TIMEOUT_SECONDS,
     IMAGE_USER_AGENT,
     PHOTO_UPLOAD_LIMIT_BYTES,
@@ -50,6 +53,19 @@ def fetch_into(ydl: yt_dlp.YoutubeDL, url: str, raw: dict | None) -> None:
 
 def _download_video(url: str, item: MediaItem, destination: Path,
                     config: Config, *, with_cookies: bool) -> Path:
+    if item.video_url:
+        path = _fetch_direct(item.video_url, destination / "video.mp4",
+                             DIRECT_VIDEO_MAX_BYTES, "video")
+    else:
+        path = _download_with_ytdlp(url, item, destination, config,
+                                    with_cookies=with_cookies)
+    if path.stat().st_size > config.max_filesize_bytes:
+        path = shrink_to_limit(path, item.duration_seconds, config)
+    return path
+
+
+def _download_with_ytdlp(url: str, item: MediaItem, destination: Path,
+                         config: Config, *, with_cookies: bool) -> Path:
     try:
         with yt_dlp.YoutubeDL(
             media_options(config, destination, with_cookies=with_cookies)
@@ -63,38 +79,45 @@ def _download_video(url: str, item: MediaItem, destination: Path,
     files = [entry for entry in destination.iterdir() if entry.is_file()]
     if not files:
         raise ClipUnavailable("yt-dlp produced no file", "no_file")
-    path = max(files, key=lambda entry: entry.stat().st_size)
+    return max(files, key=lambda entry: entry.stat().st_size)
 
-    if path.stat().st_size > config.max_filesize_bytes:
-        path = shrink_to_limit(path, item.duration_seconds, config)
-    return path
+
+def _fetch_direct(url: str, target: Path, max_bytes: int, what: str) -> Path:
+    """Stream a URL to disk, refusing it past `max_bytes`.
+
+    We fetch this URL ourselves, so yt-dlp's extractor allowlist does not cover
+    it. It came from a platform's JSON, a scraper, or a third-party mirror.
+    """
+    try:
+        ensure_safe(url)
+    except UnsafeUrl as error:
+        raise ClipRejected(f"refusing that {what}: {error}", "unsafe_url") from error
+
+    request = urllib.request.Request(url, headers={"User-Agent": IMAGE_USER_AGENT})
+    written = 0
+    try:
+        with (urllib.request.urlopen(request, timeout=IMAGE_FETCH_TIMEOUT_SECONDS)
+              as response, target.open("wb") as file):
+            while chunk := response.read(DIRECT_FETCH_CHUNK_BYTES):
+                written += len(chunk)
+                if written > max_bytes:
+                    raise ClipRejected(f"{what} is too big to fetch", f"{what}_too_big")
+                file.write(chunk)
+    except OSError as error:
+        raise ClipUnavailable(f"{what} fetch failed: {error}",
+                              f"{what}_fetch_failed") from error
+    return target
 
 
 def _download_image(item: MediaItem, destination: Path, index: int) -> Path:
-    # We fetch this URL ourselves, so yt-dlp's extractor allowlist does not
-    # cover it. The URL came from a platform's JSON or a third-party mirror.
     try:
-        ensure_safe(item.image_url)
-    except UnsafeUrl as error:
-        raise ClipRejected(f"refusing that image: {error}", "unsafe_url") from error
-
-    target = destination / f"image_{index}.jpg"
-    request = urllib.request.Request(
-        item.image_url, headers={"User-Agent": IMAGE_USER_AGENT}
-    )
-    try:
-        with urllib.request.urlopen(
-            request, timeout=IMAGE_FETCH_TIMEOUT_SECONDS
-        ) as response:
-            target.write_bytes(response.read())
-    except OSError as error:
-        raise ClipUnavailable(f"image fetch failed: {error}",
-                              "image_fetch_failed") from error
-
-    if target.stat().st_size > PHOTO_UPLOAD_LIMIT_BYTES:
+        return _fetch_direct(item.image_url, destination / f"image_{index}.jpg",
+                             PHOTO_UPLOAD_LIMIT_BYTES, "image")
+    except ClipRejected as error:
+        if error.reason != "image_too_big":
+            raise
         raise ClipRejected("image is over Telegram's 10 MB photo limit",
-                           "photo_too_big")
-    return target
+                           "photo_too_big") from error
 
 
 def download_items(url: str, info: ClipInfo, destination: Path,

@@ -131,3 +131,22 @@ def test_unwritable_path_disables_the_log_instead_of_crashing():
         platform="x", error_type="E", message="m", url="u", detail="d", request_id="r")
     assert not is_new and len(fingerprint) == 6
     assert Reports(events).summary(30)["total"] == 0
+
+
+def test_an_old_event_log_gains_the_source_column(tmp_path):
+    """The Pi's events.db predates `source`; CREATE IF NOT EXISTS would not add it."""
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.execute("CREATE TABLE events (id INTEGER PRIMARY KEY, at INTEGER NOT NULL,"
+                " platform TEXT, kind TEXT, outcome TEXT NOT NULL, reason TEXT,"
+                " total_ms INTEGER, bytes INTEGER, reencoded INTEGER DEFAULT 0,"
+                " chat_hash TEXT, user_hash TEXT, request_id TEXT)")
+    old.execute("INSERT INTO events (at, outcome) VALUES (1, 'sent')")
+    old.commit()
+    old.close()
+
+    log = EventLog(Database.local(path), 90, "salt")
+    log.record(Event(outcome="sent", source="apify"))
+    rows = log.query("SELECT outcome, source FROM events ORDER BY id")
+    assert rows == [{"outcome": "sent", "source": None},
+                    {"outcome": "sent", "source": "apify"}]

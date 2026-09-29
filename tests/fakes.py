@@ -84,7 +84,7 @@ def clip_key_for(url: str) -> str:
 def make_probe(delay_seconds: float = 0.0, error=None, info=None, calls=None):
     """Blocking, like the real probe: it runs in a worker thread."""
 
-    def probe(url: str, config) -> ClipInfo:
+    def probe(url: str, config, *, with_cookies: bool = False) -> ClipInfo:
         if calls is not None:
             calls.append(url)
         if delay_seconds:

@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS events (
     reencoded   INTEGER DEFAULT 0,
     chat_hash   TEXT,
     user_hash   TEXT,
-    request_id  TEXT
+    request_id  TEXT,
+    source      TEXT
 );
 CREATE INDEX IF NOT EXISTS events_at ON events (at);
 
@@ -30,3 +31,9 @@ CREATE TABLE IF NOT EXISTS error_signatures (
     seen_count  INTEGER NOT NULL DEFAULT 1
 );
 """
+
+# Columns added after the first release, for event logs that predate them.
+# (table, column, type)
+ADDED_COLUMNS = (
+    ("events", "source", "TEXT"),
+)

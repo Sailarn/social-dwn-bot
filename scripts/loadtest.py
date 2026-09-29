@@ -119,7 +119,6 @@ class Rig:
 def stub(monkey_probe, monkey_download):
     extract.probe = monkey_probe
     fetch.download_items = monkey_download
-    delivery.probe = monkey_probe
 
 
 async def drive(rig, urls, concurrency, **send_kwargs):

@@ -169,3 +169,34 @@ class TestUnsafeImageUrls:
         downloaded = fetch.download_items(
             "u", info_of(photo(), photo(), photo()), tmp_path, config)
         assert len(downloaded) == 2
+
+
+class TestDirectVideo:
+    """Videos a scraper already extracted: a plain download, no yt-dlp."""
+
+    def video(self):
+        return MediaItem(kind=MediaKind.VIDEO, video_url="https://cdn.example/v.mp4",
+                         duration_seconds=10)
+
+    def test_is_streamed_to_disk(self, monkeypatch, tmp_path, config):
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen(b"\x00" * 1000))
+        [item] = fetch.download_items("https://instagram.com/reel/X", info_of(self.video()),
+                                      tmp_path, config)
+        assert item.path.stat().st_size == 1000
+
+    def test_a_huge_file_is_refused_not_filled(self, monkeypatch, tmp_path, config):
+        monkeypatch.setattr(fetch, "DIRECT_VIDEO_MAX_BYTES", 500)
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen(b"\x00" * 1000))
+        with pytest.raises(ClipRejected) as caught:
+            fetch.download_items("https://instagram.com/reel/X", info_of(self.video()),
+                                 tmp_path, config)
+        assert caught.value.reason == "video_too_big"
+
+    def test_a_cdn_refusal_is_retryable(self, monkeypatch, tmp_path, config):
+        """So the pipeline can fall back to cookies."""
+        def refuse(request, timeout=None):
+            raise OSError("HTTP Error 403: Forbidden")
+        monkeypatch.setattr(urllib.request, "urlopen", refuse)
+        with pytest.raises(ClipUnavailable):
+            fetch.download_items("https://instagram.com/reel/X", info_of(self.video()),
+                                 tmp_path, config)

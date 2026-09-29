@@ -13,7 +13,7 @@ import logging
 import re
 from dataclasses import dataclass
 from src.storage.database import Database
-from src.storage.schema import EVENT_LOG_SCHEMA
+from src.storage.schema import ADDED_COLUMNS, EVENT_LOG_SCHEMA
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ class Event:
     chat_id: int | None = None
     user_id: int | None = None
     request_id: str | None = None
+    source: str | None = None
 
 
 def fingerprint_of(platform: str, error_type: str, message: str) -> str:
@@ -66,6 +67,18 @@ class EventLog:
                           else None)
         if database is not None and self._database is None:
             log.warning("event log disabled")
+        if self._database is not None:
+            self._add_missing_columns()
+
+    def _add_missing_columns(self) -> None:
+        """CREATE IF NOT EXISTS leaves an older table as it was."""
+        for table, column, column_type in ADDED_COLUMNS:
+            existing = {row["name"] for row in
+                        self._database.query(f"PRAGMA table_info({table})")}
+            if existing and column not in existing:
+                log.info("adding column %s.%s", table, column)
+                self._database.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
 
     def _hash(self, value: int | None) -> str | None:
         """Distinct-but-anonymous: enough to count chats, not to name them."""
@@ -79,12 +92,12 @@ class EventLog:
             return
         self._database.execute(
             "INSERT INTO events (at, platform, kind, outcome, reason, total_ms,"
-            " bytes, reencoded, chat_hash, user_hash, request_id)"
-            " VALUES (strftime('%s','now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " bytes, reencoded, chat_hash, user_hash, request_id, source)"
+            " VALUES (strftime('%s','now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (event.platform, event.kind, event.outcome, event.reason,
              event.total_ms, event.bytes, int(event.reencoded),
              self._hash(event.chat_id), self._hash(event.user_id),
-             event.request_id),
+             event.request_id, event.source),
         )
 
     def record_error(self, *, platform: str, error_type: str, message: str,

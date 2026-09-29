@@ -5,6 +5,15 @@ from enum import Enum
 from pathlib import Path
 
 
+class Source:
+    """Where a delivered post came from, in the order they are tried."""
+
+    CACHE = "cache"
+    ANONYMOUS = "anonymous"
+    APIFY = "apify"
+    COOKIES = "cookies"
+
+
 class MediaKind(Enum):
     VIDEO = "video"
     PHOTO = "photo"
@@ -17,9 +26,11 @@ class MediaItem:
 
     kind: MediaKind
     # Photos carry a direct URL; videos carry yt-dlp's own result so the
-    # download can reuse it instead of extracting a second time.
+    # download can reuse it instead of extracting a second time — or, when a
+    # third party did the extraction, a direct URL to the file.
     image_url: str | None = None
     raw: dict | None = field(default=None, repr=False, compare=False)
+    video_url: str | None = None
     duration_seconds: int = 0
     width: int = 0
     height: int = 0
@@ -34,9 +45,13 @@ class ClipInfo:
     key: str
     title: str
     items: tuple[MediaItem, ...] = ()
-    # Media URLs from an authenticated probe are bound to that session, so the
-    # download has to use the same mode.
-    used_cookies: bool = False
+    source: str = Source.ANONYMOUS
+
+    @property
+    def used_cookies(self) -> bool:
+        """Media URLs from an authenticated probe are bound to that session, so
+        the download has to use the same mode."""
+        return self.source == Source.COOKIES
 
     @property
     def kind(self) -> MediaKind:

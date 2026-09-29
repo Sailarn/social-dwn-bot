@@ -14,11 +14,9 @@ from aiogram.types import Message
 
 from src.core.config import Config
 from src.core.errors import ClipRejected, ClipUnavailable, MediaError
-from src.core.models import ClipInfo
-from src.core.retry import with_retries
+from src.core.models import ClipInfo, Source
 from src.core.tracing import start_request
-from src.media import fetch, links
-from src.media.extract import probe
+from src.media import links, pipeline
 from src.storage.stats import Event
 from src.telegram import notify, send
 from src.telegram.services import Services
@@ -50,7 +48,8 @@ async def deliver_clip(
     request_id = start_request()
     started = time.monotonic()
     platform = links.platform_of(url)
-    record = {"outcome": "error", "reason": None, "kind": None, "bytes": 0}
+    record = {"outcome": "error", "reason": None, "kind": None, "bytes": 0,
+              "source": None}
 
     try:
         await _run(message, bot, config, services, url, record)
@@ -80,6 +79,7 @@ async def deliver_clip(
             reason=record["reason"],
             total_ms=int((time.monotonic() - started) * 1000),
             bytes=record["bytes"],
+            source=record["source"],
             chat_id=message.chat.id,
             user_id=message.from_user.id if message.from_user else None,
             request_id=request_id,
@@ -96,13 +96,12 @@ async def _run(message, bot, config, services: Services, url, record) -> None:
     if cached:
         await services.chat_pacer.wait(message.chat.id)
         kind = await with_flood_retry(lambda: send.send_cached(message, cached))
-        record.update(outcome="cache_hit", kind=kind.value)
+        record.update(outcome="cache_hit", kind=kind.value, source=Source.CACHE)
         return
 
     await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
-    info = await with_retries(
-        lambda: probe(url, config), config.download_attempts, "probe")
-    record["kind"] = info.kind.value
+    info = await pipeline.resolve(url, config, services.notifier.send)
+    record.update(kind=info.kind.value, source=info.source)
 
     # Slower path: a different URL for something already sent.
     cached = await asyncio.to_thread(cache.get, info.key)
@@ -110,11 +109,11 @@ async def _run(message, bot, config, services: Services, url, record) -> None:
         await asyncio.to_thread(cache.put, url_key, cached)
         await services.chat_pacer.wait(message.chat.id)
         await with_flood_retry(lambda: send.send_cached(message, cached))
-        record["outcome"] = "cache_hit"
+        record.update(outcome="cache_hit", source=Source.CACHE)
         return
 
-    file_id, size = await _download_and_send(message, config, services, info, url)
-    record.update(outcome="sent", bytes=size)
+    info, file_id, size = await _download_and_send(message, config, services, info, url)
+    record.update(outcome="sent", bytes=size, source=info.source)
     if file_id:
         value = send.cache_value(info.kind, file_id)
         await asyncio.to_thread(cache.put, info.key, value)
@@ -123,12 +122,11 @@ async def _run(message, bot, config, services: Services, url, record) -> None:
 
 async def _download_and_send(
     message: Message, config: Config, services: Services, info: ClipInfo, url: str
-) -> tuple[str | None, int]:
-    """Fetch every item in the post, send it, and report the file_id and size."""
+) -> tuple[ClipInfo, str | None, int]:
+    """Fetch every item in the post, send it, and report what was sent: the info
+    it really came from, the file_id and the size."""
     with tempfile.TemporaryDirectory(prefix="socialdl-") as workdir:
-        downloaded = await with_retries(
-            lambda: fetch.download_items(url, info, Path(workdir), config),
-            config.download_attempts, "download")
+        info, downloaded = await pipeline.download(url, info, Path(workdir), config)
         size = sum(entry.path.stat().st_size for entry in downloaded)
         log.info("sending %s (%s, %d item(s), %d bytes)",
                  info.key, info.kind.value, len(downloaded), size)
@@ -136,8 +134,9 @@ async def _download_and_send(
         await services.chat_pacer.wait(message.chat.id)
         if len(downloaded) > 1:
             await with_flood_retry(lambda: send.send_album(message, downloaded))
-            return None, size
-        return await with_flood_retry(lambda: send.send_one(message, downloaded[0])), size
+            return info, None, size
+        file_id = await with_flood_retry(lambda: send.send_one(message, downloaded[0]))
+        return info, file_id, size
 
 
 async def _register(services: Services, platform: str, error: Exception,

@@ -5,6 +5,7 @@ authenticated traffic is what gets a scraping account flagged. So: anonymous
 first, cookies only for failures a session could actually fix.
 """
 
+import asyncio
 import dataclasses
 
 import pytest
@@ -12,7 +13,8 @@ import yt_dlp
 
 from src.core.config import Config, load_config
 from src.core.errors import ClipRejected, ClipUnavailable
-from src.media import extract, fetch
+from src.core import retry
+from src.media import extract, fetch, pipeline
 from src.media.ytdlp import media_options
 
 VIDEO_RESULT = {"id": "v", "extractor_key": "Instagram", "duration": 10,
@@ -23,7 +25,24 @@ VIDEO_RESULT = {"id": "v", "extractor_key": "Instagram", "duration": 10,
 def cookie_config(tmp_path):
     cookies = tmp_path / "cookies.txt"
     cookies.write_text("# Netscape HTTP Cookie File\n")
-    return Config(bot_token="x", cookies_file=cookies)
+    # One anonymous attempt, so call lists show the order of steps, not retries.
+    return Config(bot_token="x", cookies_file=cookies, download_attempts=1)
+
+
+@pytest.fixture(autouse=True)
+def no_waiting(monkeypatch):
+    async def instant(seconds):
+        return None
+    monkeypatch.setattr(retry.asyncio, "sleep", instant)
+
+
+async def _no_alert(text):
+    return True
+
+
+def resolve(url, config):
+    """The whole pipeline, as delivery runs it."""
+    return asyncio.run(pipeline.resolve(url, config, _no_alert))
 
 
 def ydl_needing_cookies(failure="Instagram sent an empty media response"):
@@ -70,25 +89,25 @@ class TestFallback:
                             type("Ok", (fake,), {"extract_info":
                                                  lambda self, u, download=False,
                                                  process=True: VIDEO_RESULT}))
-        info = extract.probe("https://instagram.com/reel/X/", cookie_config)
+        info = resolve("https://instagram.com/reel/X/", cookie_config)
         assert info.used_cookies is False
 
     def test_login_walled_post_retries_with_cookies(self, monkeypatch, cookie_config):
         fake = ydl_needing_cookies()
         monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
-        info = extract.probe("https://instagram.com/reel/X/", cookie_config)
+        info = resolve("https://instagram.com/reel/X/", cookie_config)
         assert fake.calls == ["anonymous", "with_cookies"], "anonymous must come first"
         assert info.used_cookies is True
 
     def test_private_post_retries(self, monkeypatch, cookie_config):
         fake = ydl_needing_cookies("This account is private")
         monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
-        assert extract.probe("https://instagram.com/p/X/", cookie_config).used_cookies
+        assert resolve("https://instagram.com/p/X/", cookie_config).used_cookies
 
     def test_age_restricted_retries(self, monkeypatch, cookie_config):
         fake = ydl_needing_cookies("This video is age-restricted")
         monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
-        assert extract.probe("https://instagram.com/p/X/", cookie_config).used_cookies
+        assert resolve("https://instagram.com/p/X/", cookie_config).used_cookies
 
 
 class TestNoPointlessRetries:
@@ -102,14 +121,14 @@ class TestNoPointlessRetries:
         fake = ydl_needing_cookies(failure)
         monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
         with pytest.raises(expected):
-            extract.probe("https://instagram.com/p/X/", cookie_config)
+            resolve("https://instagram.com/p/X/", cookie_config)
         assert fake.calls == ["anonymous"], "must not spend a session on this"
 
     def test_no_retry_when_there_are_no_cookies(self, monkeypatch):
         fake = ydl_needing_cookies()
         monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
         with pytest.raises(ClipRejected, match="needs a login"):
-            extract.probe("https://instagram.com/p/X/", Config(bot_token="x"))
+            resolve("https://instagram.com/p/X/", Config(bot_token="x", download_attempts=1))
         assert fake.calls == ["anonymous"]
 
 
@@ -125,7 +144,7 @@ class TestCookiesOnThrottle:
     def test_an_instagram_throttle_retries_with_cookies(self, monkeypatch, opted_in):
         fake = ydl_needing_cookies(self.THROTTLE)
         monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
-        info = extract.probe("https://www.instagram.com/reel/X/", opted_in)
+        info = resolve("https://www.instagram.com/reel/X/", opted_in)
         assert fake.calls == ["anonymous", "with_cookies"]
         assert info.used_cookies is True
 
@@ -133,14 +152,14 @@ class TestCookiesOnThrottle:
         fake = ydl_needing_cookies(self.THROTTLE)
         monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
         with pytest.raises(ClipUnavailable):
-            extract.probe("https://www.tiktok.com/@a/video/1", opted_in)
+            resolve("https://www.tiktok.com/@a/video/1", opted_in)
         assert fake.calls == ["anonymous"]
 
     def test_off_by_default(self, monkeypatch, cookie_config):
         fake = ydl_needing_cookies(self.THROTTLE)
         monkeypatch.setattr(extract.yt_dlp, "YoutubeDL", fake)
         with pytest.raises(ClipUnavailable):
-            extract.probe("https://www.instagram.com/reel/X/", cookie_config)
+            resolve("https://www.instagram.com/reel/X/", cookie_config)
         assert fake.calls == ["anonymous"]
 
     def test_parses_from_env(self, monkeypatch):
@@ -177,11 +196,12 @@ class TestDownloadFollowsTheProbe:
     @pytest.mark.parametrize("used_cookies", [True, False])
     def test_download_uses_the_same_mode(self, monkeypatch, tmp_path, cookie_config,
                                          used_cookies):
-        from src.core.models import ClipInfo, MediaItem, MediaKind
+        from src.core.models import Source, ClipInfo, MediaItem, MediaKind
         seen = self._capture(monkeypatch)
         (tmp_path / "0").mkdir()
         (tmp_path / "0" / "v.mp4").write_bytes(b"video")
-        info = ClipInfo(key="k", title="t", used_cookies=used_cookies,
+        info = ClipInfo(key="k", title="t",
+                        source=Source.COOKIES if used_cookies else Source.ANONYMOUS,
                         items=(MediaItem(kind=MediaKind.VIDEO, raw={"id": "v"}),))
         fetch.download_items("https://instagram.com/reel/X/", info, tmp_path,
                              cookie_config)

@@ -5,9 +5,9 @@ import logging
 import yt_dlp
 
 from src.core.config import Config
-from src.core.errors import ClipRejected, ClipUnavailable, as_user_error
+from src.core.errors import ClipRejected, as_user_error
 from src.core.limits import ALBUM_MAX_ITEMS
-from src.core.models import ClipInfo, MediaItem, MediaKind
+from src.core.models import ClipInfo, MediaItem, MediaKind, Source
 from src.media import twitter_photos
 from src.media.links import platform_of
 from src.media.ytdlp import media_options
@@ -83,31 +83,23 @@ def _x_photo_items(url: str) -> list[MediaItem]:
             for image_url in twitter_photos.photo_urls(url)]
 
 
-def probe(url: str, config: Config) -> ClipInfo:
-    """Read metadata without downloading, so a long video costs us nothing.
-
-    Anonymous first. Cookies are tried only when the post failed for a reason a
-    session could fix, which keeps authenticated traffic to the minimum — that
-    is what stops the account being flagged.
-    """
-    try:
-        return _probe(url, config, with_cookies=False)
-    except (ClipRejected, ClipUnavailable) as error:
-        if not (config.cookies_file and _cookies_could_help(error, url, config)):
-            raise
-        log.info("retrying %s with cookies (%s)", url, error.reason)
-        return _probe(url, config, with_cookies=True)
-
-
-def _cookies_could_help(error: ClipRejected | ClipUnavailable, url: str,
-                        config: Config) -> bool:
-    if error.reason in COOKIE_RETRY_REASONS:
+def cookies_could_help(reason: str | None, url: str, config: Config) -> bool:
+    """Only failures a session could fix earn a cookie attempt: every
+    authenticated request spends the account's trust."""
+    if not config.cookies_file:
+        return False
+    if reason in COOKIE_RETRY_REASONS:
         return True
-    return (config.cookies_on_throttle and error.reason == "site_throttled"
+    return (config.cookies_on_throttle and reason == "site_throttled"
             and platform_of(url) in THROTTLE_COOKIE_PLATFORMS)
 
 
-def _probe(url: str, config: Config, *, with_cookies: bool) -> ClipInfo:
+def probe(url: str, config: Config, *, with_cookies: bool = False) -> ClipInfo:
+    """Read metadata without downloading, so a long video costs us nothing.
+
+    One attempt in one mode; which modes are tried, and in what order, is the
+    pipeline's business.
+    """
     try:
         with yt_dlp.YoutubeDL(media_options(config, with_cookies=with_cookies)) as ydl:
             raw = ydl.extract_info(url, download=False)
@@ -141,5 +133,5 @@ def _probe(url: str, config: Config, *, with_cookies: bool) -> ClipInfo:
         key=_clip_key(entries[0]),
         title=raw.get("title") or entries[0].get("title") or "post",
         items=tuple(items[:ALBUM_MAX_ITEMS]),
-        used_cookies=with_cookies,
+        source=Source.COOKIES if with_cookies else Source.ANONYMOUS,
     )

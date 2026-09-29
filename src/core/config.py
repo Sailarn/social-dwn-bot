@@ -66,6 +66,7 @@ class Config:
     cookies_on_throttle: bool = False
     turso_database_url: str = ""
     turso_auth_token: str = ""
+    apify_token: str = ""
 
     @property
     def max_filesize_bytes(self) -> int:
@@ -167,4 +168,5 @@ def load_config() -> Config:
         cookies_on_throttle=_bool_env("COOKIES_ON_THROTTLE", False),
         turso_database_url=os.environ.get("TURSO_DATABASE_URL", "").strip(),
         turso_auth_token=os.environ.get("TURSO_AUTH_TOKEN", "").strip(),
+        apify_token=os.environ.get("APIFY_TOKEN", "").strip(),
     )

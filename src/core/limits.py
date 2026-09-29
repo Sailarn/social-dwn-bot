@@ -21,3 +21,12 @@ REENCODE_TIMEOUT_SECONDS = 900
 # Fetching a photo post's images.
 IMAGE_FETCH_TIMEOUT_SECONDS = 60
 IMAGE_USER_AGENT = "Mozilla/5.0"
+
+# Apify runs a scraper per request: starting it is most of the wait.
+APIFY_TIMEOUT_SECONDS = 180
+APIFY_RUN_TIMEOUT_SECONDS = 150
+
+# A video fetched straight from a CDN, before any re-encode. Past this it is not
+# worth the disk or the transcode on a small host.
+DIRECT_VIDEO_MAX_BYTES = 200 * 1024 * 1024
+DIRECT_FETCH_CHUNK_BYTES = 256 * 1024

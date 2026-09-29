@@ -12,7 +12,7 @@ from fakes import FakeBot, FakeMessage, FakeNotifier, album_info, make_download,
 from src.core.config import Config
 from src.core.errors import ClipRejected, ClipUnavailable
 from src.core.pacing import Pacer, PlatformPacer
-from src.media import fetch
+from src.media import extract, fetch
 from src.storage.cache import FileIdCache
 from src.storage.reports import Reports
 from src.storage.stats import EventLog
@@ -38,7 +38,7 @@ def rig(tmp_path, monkeypatch):
             self.download_calls: list[str] = []
 
         def stub(self, probe_error=None, download_error=None, info=None, size=2048):
-            monkeypatch.setattr(delivery, "probe", make_probe(
+            monkeypatch.setattr(extract, "probe", make_probe(
                 error=probe_error, info=info, calls=self.probe_calls))
             monkeypatch.setattr(fetch, "download_items", make_download(
                 size_bytes=size, error=download_error, calls=self.download_calls))
