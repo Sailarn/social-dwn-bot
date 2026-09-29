@@ -1,6 +1,7 @@
 """Turning a link into a reply, and recording what happened."""
 
 import asyncio
+import contextlib
 import logging
 import tempfile
 import time
@@ -23,6 +24,9 @@ from src.telegram.services import Services
 
 log = logging.getLogger(__name__)
 
+# Telegram shows a chat action for about 5 s; repeat it a little sooner.
+CHAT_ACTION_REFRESH_SECONDS = 4
+
 # Telegram answers a flood with a 429 carrying how long to wait. Honour it once;
 # a second one means the pacing is wrong, not that we should keep hammering.
 FLOOD_RETRY_GRACE_SECONDS = 1
@@ -36,6 +40,30 @@ async def with_flood_retry(operation):
         log.warning("telegram asked for %ss before the next send", error.retry_after)
         await asyncio.sleep(error.retry_after + FLOOD_RETRY_GRACE_SECONDS)
         return await operation()
+
+
+@contextlib.asynccontextmanager
+async def showing_progress(bot: Bot, chat_id: int):
+    """Keep "sending video…" on screen for as long as the work takes.
+
+    One chat action fades after about 5 s, and an Apify run can take a minute;
+    without this the bot looks dead half-way through.
+    """
+    async def repeat() -> None:
+        while True:
+            try:
+                await bot.send_chat_action(chat_id, ChatAction.UPLOAD_VIDEO)
+            except Exception as error:  # noqa: BLE001 - cosmetic, never fatal
+                log.debug("chat action failed: %s", error)
+            await asyncio.sleep(CHAT_ACTION_REFRESH_SECONDS)
+
+    task = asyncio.create_task(repeat())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 async def deliver_clip(
@@ -108,9 +136,16 @@ async def _run(message, bot, config, services: Services, url, record) -> None:
         record.update(outcome="cache_hit", kind=kind.value, source=Source.CACHE)
         return
 
-    await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
     attempt = pipeline.Attempt(url, config, services.notifier.send)
     record["trail"] = attempt.trail
+    async with showing_progress(bot, message.chat.id):
+        await _fetch_and_send(message, services, attempt, record)
+
+
+async def _fetch_and_send(message, services: Services, attempt: pipeline.Attempt,
+                          record) -> None:
+    url_key = f"url:{links.normalize_url(attempt.url)}"
+    cache = services.cache
     info = await attempt.resolve()
     record.update(kind=info.kind.value, source=info.source)
 

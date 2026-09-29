@@ -204,3 +204,42 @@ class TestAlerting:
         rig.stub()
         run(rig.deliver())
         assert rig.services.notifier.sent == []
+
+
+class TestProgress:
+    """The "sending video…" indicator lasts as long as the work."""
+
+    class Bot:
+        def __init__(self, fail=False):
+            self.actions = 0
+            self.fail = fail
+
+        async def send_chat_action(self, chat_id, action):
+            self.actions += 1
+            if self.fail:
+                raise RuntimeError("Too Many Requests")
+
+    def test_repeats_while_the_work_runs_and_stops_after(self, monkeypatch):
+        monkeypatch.setattr(delivery, "CHAT_ACTION_REFRESH_SECONDS", 0.01)
+        bot = self.Bot()
+
+        async def slow_work():
+            async with delivery.showing_progress(bot, 1):
+                await asyncio.sleep(0.05)
+            after = bot.actions
+            await asyncio.sleep(0.03)
+            return after
+
+        after = run(slow_work())
+        assert after >= 3, "must be refreshed, not sent once"
+        assert bot.actions == after, "must stop when the work is done"
+
+    def test_a_failing_action_never_fails_the_delivery(self, monkeypatch):
+        monkeypatch.setattr(delivery, "CHAT_ACTION_REFRESH_SECONDS", 0.01)
+
+        async def work():
+            async with delivery.showing_progress(self.Bot(fail=True), 1):
+                await asyncio.sleep(0.03)
+            return "done"
+
+        assert run(work()) == "done"
