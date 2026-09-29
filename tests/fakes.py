@@ -21,7 +21,12 @@ class FakeMessage:
     """Records what would have been sent, and to whom."""
 
     def __init__(self, chat_id: int = -100, user_id: int = 1, text: str = ""):
-        self.chat = type("C", (), {"id": chat_id})()
+        # Telegram's convention: groups have negative ids.
+        self.chat = type("C", (), {
+            "id": chat_id,
+            "type": "private" if chat_id > 0 else "supergroup",
+            "title": None if chat_id > 0 else f"Group {chat_id}",
+        })()
         self.from_user = type("U", (), {"id": user_id})()
         self.text = text
         self.caption = None

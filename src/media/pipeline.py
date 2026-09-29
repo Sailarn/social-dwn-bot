@@ -44,69 +44,81 @@ def _worth_showing(current: MediaError, candidate: MediaError) -> MediaError:
     return candidate if isinstance(candidate, ClipRejected) else current
 
 
-async def _apify_step(url: str, config: Config, alert: Alert) -> ClipInfo:
-    try:
-        return await asyncio.to_thread(apify.probe, url, config)
-    except apify.CreditsExhausted as error:
-        if error.first_time:
-            await alert(
-                "💳 Apify credits are used up for this month. Instagram falls "
-                "back to cookies until the 1st.")
-        raise
+class Attempt:
+    """One post's way through the steps. `trail` records every step tried, in
+    order — including ones that failed, since a failed Apify run still costs
+    credit and a failed cookie request still spends the account."""
 
+    def __init__(self, url: str, config: Config, alert: Alert):
+        self.url = url
+        self.config = config
+        self.alert = alert
+        self.trail: list[str] = []
 
-async def _cookies_step(url: str, config: Config) -> ClipInfo:
-    log.info("trying %s with cookies", url)
-    return await asyncio.to_thread(extract.probe, url, config, with_cookies=True)
-
-
-async def resolve(url: str, config: Config, alert: Alert) -> ClipInfo:
-    """Metadata for the post, from the first step that can read it."""
-    try:
-        return await with_retries(
-            lambda: extract.probe(url, config), config.download_attempts, "probe")
-    except MediaError as error:
-        failure = error
-
-    steps = []
-    if _apify_could_help(failure, url, config):
-        steps.append(lambda: _apify_step(url, config, alert))
-    if extract.cookies_could_help(failure.reason, url, config):
-        steps.append(lambda: _cookies_step(url, config))
-
-    shown = failure
-    for step in steps:
+    async def resolve(self) -> ClipInfo:
+        """Metadata for the post, from the first step that can read it."""
+        self.trail.append(Source.ANONYMOUS)
         try:
-            return await step()
+            return await with_retries(
+                lambda: extract.probe(self.url, self.config),
+                self.config.download_attempts, "probe")
         except MediaError as error:
-            log.info("%s: next step failed too (%s)", platform_of(url), error)
-            shown = _worth_showing(shown, error)
-            if isinstance(error, ClipRejected):
-                break
-    raise shown
+            failure = error
 
+        steps = []
+        if _apify_could_help(failure, self.url, self.config):
+            steps.append(self._apify)
+        if extract.cookies_could_help(failure.reason, self.url, self.config):
+            steps.append(self._cookies)
 
-async def download(url: str, info: ClipInfo, workdir: Path,
-                   config: Config) -> tuple[ClipInfo, list[DownloadedItem]]:
-    """The files, and the info they came from — which changes if the Apify
-    media would not download and cookies had to be used instead."""
-    try:
-        return info, await _download_into(url, info, workdir, config)
-    except ClipUnavailable as error:
-        if info.source != Source.APIFY or not config.cookies_file:
+        shown = failure
+        for step in steps:
+            try:
+                return await step()
+            except MediaError as error:
+                log.info("%s: next step failed too (%s)", platform_of(self.url), error)
+                shown = _worth_showing(shown, error)
+                if isinstance(error, ClipRejected):
+                    break
+        raise shown
+
+    async def download(self, info: ClipInfo,
+                       workdir: Path) -> tuple[ClipInfo, list[DownloadedItem]]:
+        """The files, and the info they came from — which changes if the Apify
+        media would not download and cookies had to be used instead."""
+        try:
+            return info, await self._download_into(info, workdir)
+        except ClipUnavailable as error:
+            if info.source != Source.APIFY or not self.config.cookies_file:
+                raise
+            log.info("apify's media did not download (%s); trying with cookies", error)
+
+        cookie_info = await self._cookies()
+        return cookie_info, await self._download_into(cookie_info, workdir)
+
+    async def _apify(self) -> ClipInfo:
+        self.trail.append(Source.APIFY)
+        try:
+            return await asyncio.to_thread(apify.probe, self.url, self.config)
+        except apify.CreditsExhausted as error:
+            if error.first_time:
+                await self.alert(
+                    "💳 Apify credits are used up for this month. Instagram falls "
+                    "back to cookies until the 1st.")
             raise
-        log.info("apify's media did not download (%s); trying with cookies", error)
 
-    cookie_info = await _cookies_step(url, config)
-    return cookie_info, await _download_into(url, cookie_info, workdir, config)
+    async def _cookies(self) -> ClipInfo:
+        self.trail.append(Source.COOKIES)
+        log.info("trying %s with cookies", self.url)
+        return await asyncio.to_thread(
+            extract.probe, self.url, self.config, with_cookies=True)
 
-
-async def _download_into(url: str, info: ClipInfo, workdir: Path,
-                         config: Config) -> list[DownloadedItem]:
-    """A directory per source, so a failed attempt's partial files are never
-    mistaken for the next attempt's."""
-    destination = workdir / info.source
-    destination.mkdir(parents=True, exist_ok=True)
-    return await with_retries(
-        lambda: fetch.download_items(url, info, destination, config),
-        config.download_attempts, "download")
+    async def _download_into(self, info: ClipInfo,
+                             workdir: Path) -> list[DownloadedItem]:
+        """A directory per source, so a failed attempt's partial files are never
+        mistaken for the next attempt's."""
+        destination = workdir / info.source
+        destination.mkdir(parents=True, exist_ok=True)
+        return await with_retries(
+            lambda: fetch.download_items(self.url, info, destination, self.config),
+            self.config.download_attempts, "download")

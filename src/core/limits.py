@@ -30,3 +30,9 @@ APIFY_RUN_TIMEOUT_SECONDS = 150
 # worth the disk or the transcode on a small host.
 DIRECT_VIDEO_MAX_BYTES = 200 * 1024 * 1024
 DIRECT_FETCH_CHUNK_BYTES = 256 * 1024
+
+# Budgets /stats measures against. Apify's free plan: $5 of credit a month, its
+# Instagram scraper about $0.0027 a post. Render's free plan: 100 GB out a month.
+APIFY_MONTHLY_CREDIT_USD = 5.0
+APIFY_COST_PER_RUN_USD = 0.0027
+RENDER_MONTHLY_BANDWIDTH_BYTES = 100 * 1024 ** 3

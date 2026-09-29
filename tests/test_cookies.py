@@ -42,7 +42,7 @@ async def _no_alert(text):
 
 def resolve(url, config):
     """The whole pipeline, as delivery runs it."""
-    return asyncio.run(pipeline.resolve(url, config, _no_alert))
+    return asyncio.run(pipeline.Attempt(url, config, _no_alert).resolve())
 
 
 def ydl_needing_cookies(failure="Instagram sent an empty media response"):

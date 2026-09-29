@@ -11,7 +11,7 @@ from src.core.config import Config
 from src.media.links import find_supported_link, platform_of
 from src.storage.ratelimit import RateLimiter
 from src.storage.stats import Event
-from src.telegram.delivery import deliver_clip
+from src.telegram.delivery import deliver_clip, group_title
 from src.telegram.services import Services
 
 log = logging.getLogger(__name__)
@@ -66,6 +66,7 @@ async def handle_possible_link(
             outcome="rate_limited", reason="rate_limited",
             platform=platform_of(url),
             chat_id=message.chat.id, user_id=message.from_user.id,
+            chat_title=group_title(message),
         ))
         await message.reply(f"⚠️ rate limit reached, try again in {wait_minutes} min")
         return

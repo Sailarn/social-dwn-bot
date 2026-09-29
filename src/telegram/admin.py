@@ -1,10 +1,13 @@
 """Admin-only commands: a short read of what the bot has been doing.
 
-Gated on ADMIN_USER_IDS. With none set nobody qualifies, because the bot itself
-may be open to everyone and usage data should not be.
+Gated on ADMIN_USER_IDS, and answered only in a private chat with the bot: the
+stats name groups, and a group is the wrong place to read another group's name.
+With no admins set nobody qualifies, because the bot itself may be open to
+everyone and usage data should not be.
 """
 
 import asyncio
+import calendar
 import logging
 import resource
 import time
@@ -16,6 +19,11 @@ from aiogram.types import Message
 
 import src
 from src.core.config import Config
+from src.core.limits import (
+    APIFY_COST_PER_RUN_USD,
+    APIFY_MONTHLY_CREDIT_USD,
+    RENDER_MONTHLY_BANDWIDTH_BYTES,
+)
 from src.core.resources import available_memory_bytes, free_disk_bytes
 from src.storage.reports import Reports
 from src.telegram import format as fmt
@@ -29,7 +37,10 @@ KB_PER_MB = 1024
 
 
 def _denied(message: Message, config: Config) -> bool:
-    return message.from_user is None or not config.is_admin(message.from_user.id)
+    """Silence, not a refusal: nothing to hint that the command exists."""
+    return (message.from_user is None
+            or not config.is_admin(message.from_user.id)
+            or message.chat.type != "private")
 
 
 @router.message(Command("stats"))
@@ -42,32 +53,95 @@ async def handle_stats(message: Message, config: Config, services: Services) -> 
 
 
 def _stats_text(reports: Reports) -> str:
-    lines = ["📊 <b>usage</b>", "<pre>"]
-    lines.append(f"{'':<10}{'24h':>7}{'7d':>7}{'30d':>7}")
     windows = [reports.summary(1), reports.summary(7), reports.summary(30)]
-    for label, key in (("requests", None), ("sent", "sent"), ("cached", "cache_hit")):
-        values = [w["total"] if key is None else w["counts"].get(key, 0) for w in windows]
-        lines.append(f"{label:<10}{values[0]:>7}{values[1]:>7}{values[2]:>7}")
+    return "\n".join([
+        *_usage_lines(windows),
+        *_source_lines(reports.sources(30)),
+        *_platform_lines(reports.platforms(30)),
+        *_chat_lines(reports.chats(30)),
+        *_reason_lines(windows[2]),
+        *_month_lines(reports.since(_start_of_month())),
+    ])
+
+
+def _usage_lines(windows: list[dict]) -> list[str]:
+    lines = ["📊 <b>usage</b>", "<pre>", f"{'':<10}{'24h':>7}{'7d':>7}{'30d':>7}"]
     failed = [sum(v for k, v in w["counts"].items()
                   if k in ("rejected", "unavailable", "error")) for w in windows]
-    lines.append(f"{'failed':<10}{failed[0]:>7}{failed[1]:>7}{failed[2]:>7}")
-    lines.append(f"{'chats':<10}{windows[0]['chats']:>7}{windows[1]['chats']:>7}"
-                 f"{windows[2]['chats']:>7}")
+    rows = (
+        ("requests", [w["total"] for w in windows]),
+        ("sent", [w["counts"].get("sent", 0) for w in windows]),
+        ("cached", [w["counts"].get("cache_hit", 0) for w in windows]),
+        ("failed", failed),
+        ("chats", [w["chats"] for w in windows]),
+    )
+    lines += [f"{label:<10}{a:>7}{b:>7}{c:>7}" for label, (a, b, c) in rows]
     lines.append("</pre>")
-
     month = windows[2]
+    served = month["counts"].get("sent", 0) + month["counts"].get("cache_hit", 0)
     lines.append(f"median {fmt.milliseconds(month['median_ms'])} · "
                  f"p95 {fmt.milliseconds(month['p95_ms'])} · "
-                 f"ok {fmt.percent(month['counts'].get('sent', 0) + month['counts'].get('cache_hit', 0), month['total'])}")
-    if month["reasons"]:
-        lines.append("\n<b>why things failed</b> (30d)")
-        lines += [f"· {fmt.esc(reason)} × {count}" for reason, count in month["reasons"]]
+                 f"ok {fmt.percent(served, month['total'])}")
+    return lines
 
-    busiest = reports.busiest_chats(30)
-    if len(busiest) > 1:
-        lines.append("\n<b>busiest chats</b> (30d)")
-        lines += [f"· {fmt.esc(chat_hash[:6])} × {count}" for chat_hash, count in busiest]
-    return "\n".join(lines)
+
+def _source_lines(sources: list[dict]) -> list[str]:
+    """Which step served what: the pipeline, measured."""
+    if not sources:
+        return []
+    lines = ["", "<b>by source</b> (30d)", "<pre>",
+             f"{'':<10}{'tried':>6}{'served':>7}{'median':>8}"]
+    lines += [f"{s['step']:<10}{s['tried']:>6}{s['served']:>7}"
+              f"{fmt.milliseconds(s['median_ms']):>8}" for s in sources]
+    lines.append("</pre>")
+    return lines
+
+
+def _platform_lines(platforms: list[dict]) -> list[str]:
+    if not platforms:
+        return []
+    lines = ["", "<b>by platform</b> (30d)", "<pre>", f"{'':<10}{'asked':>6}{'ok':>7}"]
+    lines += [f"{fmt.esc(p['platform'])[:10]:<10}{p['requests']:>6}"
+              f"{fmt.percent(p['served'], p['requests']):>7}" for p in platforms]
+    lines.append("</pre>")
+    return lines
+
+
+def _chat_lines(chats: dict) -> list[str]:
+    if not chats["groups"] and not chats["private_chats"]:
+        return []
+    lines = ["", "<b>chats</b> (30d)"]
+    lines += [f"· {fmt.esc(title)} <code>{chat_id}</code> × {count}"
+              for title, chat_id, count in chats["groups"]]
+    if chats["private_chats"]:
+        lines.append(f"· private: {chats['private_chats']} chat(s) × "
+                     f"{chats['private_requests']}")
+    return lines
+
+
+def _reason_lines(month: dict) -> list[str]:
+    if not month["reasons"]:
+        return []
+    return ["", "<b>why things failed</b> (30d)",
+            *[f"· {fmt.esc(reason)} × {count}" for reason, count in month["reasons"]]]
+
+
+def _month_lines(month: dict) -> list[str]:
+    """Against the free plans' monthly limits, which reset on the 1st."""
+    spent = month["apify_runs"] * APIFY_COST_PER_RUN_USD
+    bandwidth = month["sent_bytes"] / RENDER_MONTHLY_BANDWIDTH_BYTES
+    return [
+        "", "<b>this month</b>",
+        f"apify {month['apify_runs']} run(s) ≈ ${spent:.2f} of "
+        f"${APIFY_MONTHLY_CREDIT_USD:.0f}",
+        f"cookie account used {month['cookie_uses']}×",
+        f"sent {fmt.size(month['sent_bytes'])} ({bandwidth:.1%} of Render's 100 GB)",
+    ]
+
+
+def _start_of_month() -> int:
+    today = time.gmtime()
+    return int(calendar.timegm((today.tm_year, today.tm_mon, 1, 0, 0, 0)))
 
 
 @router.message(Command("errors"))

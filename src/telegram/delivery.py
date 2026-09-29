@@ -49,7 +49,7 @@ async def deliver_clip(
     started = time.monotonic()
     platform = links.platform_of(url)
     record = {"outcome": "error", "reason": None, "kind": None, "bytes": 0,
-              "source": None}
+              "source": None, "trail": []}
 
     try:
         await _run(message, bot, config, services, url, record)
@@ -80,10 +80,19 @@ async def deliver_clip(
             total_ms=int((time.monotonic() - started) * 1000),
             bytes=record["bytes"],
             source=record["source"],
+            tried=",".join(record["trail"]) or None,
             chat_id=message.chat.id,
+            chat_title=group_title(message),
             user_id=message.from_user.id if message.from_user else None,
             request_id=request_id,
         ))
+
+
+def group_title(message: Message) -> str | None:
+    """Groups are named in the admin's stats; private chats never are."""
+    if message.chat.type == "private":
+        return None
+    return message.chat.title or str(message.chat.id)
 
 
 async def _run(message, bot, config, services: Services, url, record) -> None:
@@ -100,7 +109,9 @@ async def _run(message, bot, config, services: Services, url, record) -> None:
         return
 
     await bot.send_chat_action(message.chat.id, ChatAction.UPLOAD_VIDEO)
-    info = await pipeline.resolve(url, config, services.notifier.send)
+    attempt = pipeline.Attempt(url, config, services.notifier.send)
+    record["trail"] = attempt.trail
+    info = await attempt.resolve()
     record.update(kind=info.kind.value, source=info.source)
 
     # Slower path: a different URL for something already sent.
@@ -112,7 +123,7 @@ async def _run(message, bot, config, services: Services, url, record) -> None:
         record.update(outcome="cache_hit", source=Source.CACHE)
         return
 
-    info, file_id, size = await _download_and_send(message, config, services, info, url)
+    info, file_id, size = await _download_and_send(message, services, attempt, info)
     record.update(outcome="sent", bytes=size, source=info.source)
     if file_id:
         value = send.cache_value(info.kind, file_id)
@@ -121,12 +132,12 @@ async def _run(message, bot, config, services: Services, url, record) -> None:
 
 
 async def _download_and_send(
-    message: Message, config: Config, services: Services, info: ClipInfo, url: str
+    message: Message, services: Services, attempt: pipeline.Attempt, info: ClipInfo
 ) -> tuple[ClipInfo, str | None, int]:
     """Fetch every item in the post, send it, and report what was sent: the info
     it really came from, the file_id and the size."""
     with tempfile.TemporaryDirectory(prefix="socialdl-") as workdir:
-        info, downloaded = await pipeline.download(url, info, Path(workdir), config)
+        info, downloaded = await attempt.download(info, Path(workdir))
         size = sum(entry.path.stat().st_size for entry in downloaded)
         log.info("sending %s (%s, %d item(s), %d bytes)",
                  info.key, info.kind.value, len(downloaded), size)

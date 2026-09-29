@@ -33,9 +33,10 @@ ALLOWED_TAGS = {"b", "i", "code", "pre", "a"}
 
 
 class FakeMessage:
-    def __init__(self, text="", user_id=ADMIN_ID):
+    def __init__(self, text="", user_id=ADMIN_ID, chat_type="private"):
         self.text = text
         self.from_user = type("User", (), {"id": user_id})()
+        self.chat = type("Chat", (), {"id": user_id, "type": chat_type})()
         self.sent = None
         self.parse_mode = None
 
@@ -94,6 +95,18 @@ class TestStats:
                          config=admin_config, services=services_for(events))
         assert "needs_login" in message.sent
         assert "rate_limited" in message.sent
+
+    def test_shows_the_pipeline_groups_and_budgets(self, events, admin_config):
+        events.record(Event(outcome="sent", platform="instagram", source="apify",
+                            tried="anonymous,apify", total_ms=30000, bytes=5_000_000,
+                            chat_id=-100, chat_title="Friends & <family>"))
+        message = render(admin.handle_stats, FakeMessage("/stats"),
+                         config=admin_config, services=services_for(events))
+        assert "by source" in message.sent
+        assert "apify" in message.sent
+        assert "Friends &amp; &lt;family&gt;" in message.sent, "titles are escaped"
+        assert "of $5" in message.sent
+        assert_valid_html(message.sent)
 
     def test_an_empty_log_still_renders(self, tmp_path, admin_config):
         empty = EventLog(Database.local(tmp_path / "empty.db"), 90, "salt")
@@ -172,5 +185,15 @@ class TestGating:
     ])
     def test_non_admin_gets_silence(self, events, admin_config, handler, text):
         message = render(handler, FakeMessage(text, user_id=999),
+                         config=admin_config, services=services_for(events))
+        assert message.sent is None
+
+    @pytest.mark.parametrize("handler,text", [
+        (admin.handle_stats, "/stats"),
+        (admin.handle_errors, "/errors"),
+    ])
+    def test_the_admin_in_a_group_gets_silence(self, events, admin_config, handler, text):
+        """Stats name groups; a group is the wrong place to read them."""
+        message = render(handler, FakeMessage(text, chat_type="supergroup"),
                          config=admin_config, services=services_for(events))
         assert message.sent is None

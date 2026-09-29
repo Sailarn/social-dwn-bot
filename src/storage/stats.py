@@ -47,7 +47,11 @@ class Event:
     chat_id: int | None = None
     user_id: int | None = None
     request_id: str | None = None
+    # Where it was finally served from, and every step tried on the way.
     source: str | None = None
+    tried: str | None = None
+    # Set for groups only; private chats stay anonymous.
+    chat_title: str | None = None
 
 
 def fingerprint_of(platform: str, error_type: str, message: str) -> str:
@@ -92,13 +96,19 @@ class EventLog:
             return
         self._database.execute(
             "INSERT INTO events (at, platform, kind, outcome, reason, total_ms,"
-            " bytes, reencoded, chat_hash, user_hash, request_id, source)"
-            " VALUES (strftime('%s','now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " bytes, reencoded, chat_hash, user_hash, request_id, source, tried)"
+            " VALUES (strftime('%s','now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (event.platform, event.kind, event.outcome, event.reason,
              event.total_ms, event.bytes, int(event.reencoded),
              self._hash(event.chat_id), self._hash(event.user_id),
-             event.request_id, event.source),
+             event.request_id, event.source, event.tried),
         )
+        if event.chat_title is not None and event.chat_id is not None:
+            self._database.execute(
+                "INSERT OR REPLACE INTO chats (chat_hash, chat_id, title, updated_at)"
+                " VALUES (?, ?, ?, strftime('%s','now'))",
+                (self._hash(event.chat_id), event.chat_id, event.chat_title[:100]),
+            )
 
     def record_error(self, *, platform: str, error_type: str, message: str,
                      url: str, detail: str, request_id: str) -> tuple[str, bool]:

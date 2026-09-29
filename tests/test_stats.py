@@ -111,12 +111,54 @@ class TestSummary:
         assert summary["median_ms"] in (1000, 3000)
         assert summary["p95_ms"] == 3000
 
-    def test_busiest_chats_are_ordered(self, events):
+    def test_groups_are_named_and_private_chats_are_not(self, events):
         for _ in range(3):
-            events.record(Event(outcome="sent", chat_id=-1))
-        events.record(Event(outcome="sent", chat_id=-2))
-        busiest = Reports(events).busiest_chats(30)
-        assert [count for _, count in busiest] == [3, 1]
+            events.record(Event(outcome="sent", chat_id=-1, chat_title="Friends"))
+        events.record(Event(outcome="sent", chat_id=-2, chat_title="Work"))
+        events.record(Event(outcome="sent", chat_id=42))
+        events.record(Event(outcome="sent", chat_id=43))
+        chats = Reports(events).chats(30)
+        assert chats["groups"] == [("Friends", -1, 3), ("Work", -2, 1)]
+        assert (chats["private_chats"], chats["private_requests"]) == (2, 2)
+        assert not events.query("SELECT * FROM chats WHERE chat_id > 0"), \
+            "private chats must never be stored by id"
+
+    def test_a_renamed_group_shows_its_latest_title(self, events):
+        events.record(Event(outcome="sent", chat_id=-1, chat_title="Old"))
+        events.record(Event(outcome="sent", chat_id=-1, chat_title="New"))
+        assert Reports(events).chats(30)["groups"] == [("New", -1, 2)]
+
+    def test_sources_count_every_step_tried(self, events):
+        events.record(Event(outcome="sent", source="anonymous", tried="anonymous",
+                            total_ms=1000))
+        events.record(Event(outcome="sent", source="apify", tried="anonymous,apify",
+                            total_ms=30000))
+        events.record(Event(outcome="sent", source="cookies",
+                            tried="anonymous,apify,cookies", total_ms=40000))
+        events.record(Event(outcome="cache_hit", source="cache"))
+        by_step = {row["step"]: row for row in Reports(events).sources(30)}
+        assert [row["step"] for row in Reports(events).sources(30)] == [
+            "cache", "anonymous", "apify", "cookies"]
+        assert (by_step["anonymous"]["tried"], by_step["anonymous"]["served"]) == (3, 1)
+        assert (by_step["apify"]["tried"], by_step["apify"]["served"]) == (2, 1)
+        assert by_step["apify"]["median_ms"] == 30000
+        assert by_step["cache"]["served"] == 1
+
+    def test_platforms_rank_by_requests(self, events):
+        for outcome in ("sent", "sent", "rejected"):
+            events.record(Event(outcome=outcome, platform="instagram"))
+        events.record(Event(outcome="sent", platform="twitter"))
+        assert Reports(events).platforms(30) == [
+            {"platform": "instagram", "requests": 3, "served": 2},
+            {"platform": "twitter", "requests": 1, "served": 1}]
+
+    def test_monthly_budgets_count_attempts_not_successes(self, events):
+        """A failed Apify run still costs credit; a failed cookie try still
+        spends the account."""
+        events.record(Event(outcome="unavailable", tried="anonymous,apify,cookies"))
+        events.record(Event(outcome="sent", tried="anonymous,apify", bytes=1000))
+        month = Reports(events).since(0)
+        assert month == {"apify_runs": 2, "cookie_uses": 1, "sent_bytes": 1000}
 
     def test_empty_log_does_not_divide_by_zero(self, events):
         summary = Reports(events).summary(30)

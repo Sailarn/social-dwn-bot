@@ -63,7 +63,8 @@ class Steps:
         self.alerts.append(text)
 
     def resolve(self, config, url=URL):
-        return asyncio.run(pipeline.resolve(url, config, self.alert))
+        self.attempt = pipeline.Attempt(url, config, self.alert)
+        return asyncio.run(self.attempt.resolve())
 
 
 def test_anonymous_success_goes_no_further(monkeypatch, config):
@@ -83,6 +84,7 @@ def test_an_apify_failure_moves_on_to_cookies(monkeypatch, config):
                   apify_result=ClipUnavailable("apify found nothing", "apify_failed"))
     assert steps.resolve(config).source == Source.COOKIES
     assert steps.calls == ["anonymous", "apify", "cookies"], "apify is not retried"
+    assert steps.attempt.trail == ["anonymous", "apify", "cookies"]
 
 
 def test_without_a_token_it_is_anonymous_then_cookies(monkeypatch, config):
@@ -136,7 +138,8 @@ class TestDownload:
         monkeypatch.setattr(fetch, "download_items", download_items)
         monkeypatch.setattr(extract, "probe", lambda url, config, *, with_cookies=False:
                             info(Source.COOKIES))
-        result = asyncio.run(pipeline.download(URL, info(Source.APIFY), tmp_path, config))
+        attempt = pipeline.Attempt(URL, config, None)
+        result = asyncio.run(attempt.download(info(Source.APIFY), tmp_path))
         return result, calls
 
     def test_apify_media_that_will_not_download_falls_back_to_cookies(

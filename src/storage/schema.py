@@ -14,9 +14,19 @@ CREATE TABLE IF NOT EXISTS events (
     chat_hash   TEXT,
     user_hash   TEXT,
     request_id  TEXT,
-    source      TEXT
+    source      TEXT,
+    tried       TEXT
 );
 CREATE INDEX IF NOT EXISTS events_at ON events (at);
+
+-- Groups only, so the admin's stats can name them. Private chats are never
+-- stored here: they stay a hash in `events`.
+CREATE TABLE IF NOT EXISTS chats (
+    chat_hash   TEXT PRIMARY KEY,
+    chat_id     INTEGER NOT NULL,
+    title       TEXT NOT NULL,
+    updated_at  INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS error_signatures (
     fingerprint TEXT PRIMARY KEY,
@@ -36,4 +46,5 @@ CREATE TABLE IF NOT EXISTS error_signatures (
 # (table, column, type)
 ADDED_COLUMNS = (
     ("events", "source", "TEXT"),
+    ("events", "tried", "TEXT"),
 )
