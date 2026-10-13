@@ -16,10 +16,21 @@ SUPPORTED_LINK_PATTERN = re.compile(
 
 TRAILING_PUNCTUATION = ").,;'\""
 
+# X appends /photo/N or /video/N when a link is shared while viewing one item.
+# yt-dlp then wants item N to be a video and fails on a photo ("Media #1 is not
+# a video"), so the suffix goes: the whole post is what was shared.
+X_MEDIA_SUFFIX = re.compile(
+    r"^(https?://(?:[\w-]+\.)*(?:x\.com|twitter\.com)/[^/?#]+/status(?:es)?/\d+)"
+    r"/(?:photo|video)/\d+",
+    re.IGNORECASE,
+)
+
 
 def find_supported_link(text: str) -> str | None:
     match = SUPPORTED_LINK_PATTERN.search(text or "")
-    return match.group(0).rstrip(TRAILING_PUNCTUATION) if match else None
+    if not match:
+        return None
+    return X_MEDIA_SUFFIX.sub(r"\1", match.group(0).rstrip(TRAILING_PUNCTUATION))
 
 
 def normalize_url(url: str) -> str:

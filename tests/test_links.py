@@ -68,3 +68,22 @@ def test_tracking_params_collapse_to_one_key():
     """Two shares of the same post must hit a single cache entry."""
     assert normalize_url("https://www.instagram.com/p/X/?igsi=1") == \
            normalize_url("https://instagram.com/p/X?igsi=2")
+
+
+@pytest.mark.parametrize("shared,expected", [
+    ("https://x.com/Bubble_Cosplay/status/2109706456614207502/photo/1",
+     "https://x.com/Bubble_Cosplay/status/2109706456614207502"),
+    ("https://twitter.com/u/status/123/video/2?s=20",
+     "https://twitter.com/u/status/123?s=20"),
+    ("https://mobile.x.com/u/status/123/photo/3",
+     "https://mobile.x.com/u/status/123"),
+])
+def test_an_x_media_suffix_is_dropped(shared, expected):
+    """yt-dlp fails on /photo/N ("Media #1 is not a video"); the post is what
+    was shared."""
+    assert find_supported_link(shared) == expected
+
+
+def test_other_platforms_keep_their_paths():
+    assert find_supported_link("https://www.instagram.com/p/Cx1/photo/1") == \
+        "https://www.instagram.com/p/Cx1/photo/1"
