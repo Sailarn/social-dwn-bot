@@ -130,6 +130,31 @@ class TestXPhotos:
         with pytest.raises(ClipRejected, match="no video or image"):
             extract.probe("https://x.com/u/status/209", config)
 
+    def test_a_link_in_the_tweet_does_not_hide_its_photo(self, patch_ydl, monkeypatch,
+                                                          config):
+        """No video, so yt-dlp follows the tweet's buff.ly link and fails on it as
+        unsupported (seen in production). The photo is still there."""
+        patch_ydl(error=download_error(
+            "ERROR: No suitable extractor found for URL https://buff.ly/xzlwd3A"))
+        monkeypatch.setattr(twitter_photos, "photo_urls", lambda url: ["http://pbs/a.jpg"])
+        info = extract.probe("https://x.com/Wario64/status/2110497391279260010", config)
+        assert info.kind is MediaKind.PHOTO
+        assert info.key == "Twitter:2110497391279260010", "same key yt-dlp would give"
+
+    def test_a_link_in_a_tweet_without_photos_is_still_refused(self, patch_ydl,
+                                                               monkeypatch, config):
+        patch_ydl(error=download_error("ERROR: No suitable extractor found for URL x"))
+        monkeypatch.setattr(twitter_photos, "photo_urls", lambda url: [])
+        with pytest.raises(ClipRejected, match="can't handle"):
+            extract.probe("https://x.com/u/status/209", config)
+
+    def test_other_failures_do_not_reach_for_photos(self, patch_ydl, monkeypatch, config):
+        patch_ydl(error=download_error("ERROR: The read operation timed out"))
+        monkeypatch.setattr(twitter_photos, "photo_urls",
+                            lambda url: pytest.fail("must not be asked"))
+        with pytest.raises(ClipUnavailable):
+            extract.probe("https://x.com/u/status/209", config)
+
     def test_the_fallback_is_not_used_for_other_platforms(self, patch_ydl, monkeypatch, config):
         patch_ydl(result={"id": "p", "extractor_key": "Instagram"})
         monkeypatch.setattr(twitter_photos, "photo_urls",

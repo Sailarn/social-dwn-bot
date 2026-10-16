@@ -83,6 +83,24 @@ def _x_photo_items(url: str) -> list[MediaItem]:
             for image_url in twitter_photos.photo_urls(url)]
 
 
+def _x_photos_instead(url: str, failure: Exception) -> ClipInfo | None:
+    """A photo-only tweet with a link in its text: yt-dlp finds no video, follows
+    the link (buff.ly, a news site) and fails on it as an unsupported URL — the
+    extractor allowlist doing its job. The photos are still there."""
+    if platform_of(url) != "twitter" or getattr(failure, "reason", None) != "unsupported_link":
+        return None
+    items = _x_photo_items(url)
+    if not items:
+        return None
+    log.info("x post %s: no video, sending its %d photo(s)", url, len(items))
+    return ClipInfo(
+        # The key yt-dlp would have given it, so either path shares the cache.
+        key=f"Twitter:{twitter_photos.tweet_id_from(url)}",
+        title="post",
+        items=tuple(items[:ALBUM_MAX_ITEMS]),
+    )
+
+
 def cookies_could_help(reason: str | None, url: str, config: Config) -> bool:
     """Only failures a session could fix earn a cookie attempt: every
     authenticated request spends the account's trust."""
@@ -106,7 +124,11 @@ def probe(url: str, config: Config, *, with_cookies: bool = False) -> ClipInfo:
     except yt_dlp.utils.DownloadError as error:
         log.warning("yt-dlp probe failed for %s: %s", url,
                     str(error).replace("\n", " ")[:300])
-        raise as_user_error(error) from error
+        failure = as_user_error(error)
+        photos = _x_photos_instead(url, failure)
+        if photos is None:
+            raise failure from error
+        return photos
 
     if raw is None:
         raise ClipRejected("nothing downloadable at that link", "no_media")
